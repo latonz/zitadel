@@ -23,7 +23,7 @@ type scimError struct {
 	Detail        string        `json:"detail,omitempty"`
 	StatusCode    int           `json:"-"`
 	Status        string        `json:"status"`
-	ZitadelDetail errorDetail   `json:"urn:ietf:params:scim:api:zitadel:messages:2.0:ErrorDetail,omitempty"`
+	ZitadelDetail *errorDetail  `json:"urn:ietf:params:scim:api:zitadel:messages:2.0:ErrorDetail,omitempty"`
 }
 
 type errorDetail struct {
@@ -84,7 +84,7 @@ func mapToScimError(ctx context.Context, err error) *scimError {
 		Detail:     localizedMsg,
 		StatusCode: statusCode,
 		Status:     strconv.Itoa(statusCode),
-		ZitadelDetail: errorDetail{
+		ZitadelDetail: &errorDetail{
 			ID:      zitadelErr.GetID(),
 			Message: zitadelErr.GetMessage(),
 		},

@@ -49,13 +49,28 @@ func mapResource[T resources.ResourceHolder](router *mux.Router, handler resourc
 
 	// TODO remove write only attributes
 	resourceRouter.HandleFunc("", handleResourceCreatedResponse(adapter.Create)).Methods(http.MethodPost)
+	resourceRouter.HandleFunc("", handleJsonResponse(adapter.List)).Methods(http.MethodGet)
+	resourceRouter.HandleFunc("/.search", handleJsonResponse(adapter.List)).Methods(http.MethodPost)
 	resourceRouter.HandleFunc("/{id}", handleResourceResponse(adapter.Get)).Methods(http.MethodGet)
-	resourceRouter.HandleFunc("/{id}", serrors.ErrorHandlerMiddleware(adapter.Delete)).Methods(http.MethodDelete)
+	resourceRouter.HandleFunc("/{id}", handleEmptyResponse(adapter.Delete)).Methods(http.MethodDelete)
 }
 
-func handleResourceCreatedResponse[T resources.ResourceHolder](next func(w http.ResponseWriter, r *http.Request) (T, error)) func(http.ResponseWriter, *http.Request) {
+func handleJsonResponse[T any](next func(r *http.Request) (T, error)) func(w http.ResponseWriter, r *http.Request) {
 	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
-		entity, err := next(w, r)
+		entity, err := next(r)
+		if err != nil {
+			return err
+		}
+
+		err = json.NewEncoder(w).Encode(entity)
+		logging.OnError(err).Warn("scim error encoding failed")
+		return nil
+	})
+}
+
+func handleResourceCreatedResponse[T resources.ResourceHolder](next func(r *http.Request) (T, error)) func(http.ResponseWriter, *http.Request) {
+	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
+		entity, err := next(r)
 		if err != nil {
 			return err
 		}
@@ -71,9 +86,9 @@ func handleResourceCreatedResponse[T resources.ResourceHolder](next func(w http.
 	})
 }
 
-func handleResourceResponse[T resources.ResourceHolder](next func(w http.ResponseWriter, r *http.Request) (T, error)) func(http.ResponseWriter, *http.Request) {
+func handleResourceResponse[T resources.ResourceHolder](next func(r *http.Request) (T, error)) func(http.ResponseWriter, *http.Request) {
 	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
-		entity, err := next(w, r)
+		entity, err := next(r)
 		if err != nil {
 			return err
 		}
@@ -90,5 +105,11 @@ func handleResourceResponse[T resources.ResourceHolder](next func(w http.Respons
 		err = json.NewEncoder(w).Encode(entity)
 		logging.OnError(err).Warn("scim error encoding failed")
 		return nil
+	})
+}
+
+func handleEmptyResponse(next func(r *http.Request) error) func(http.ResponseWriter, *http.Request) {
+	return handleResourceResponse[resources.ResourceHolder](func(r *http.Request) (resources.ResourceHolder, error) {
+		return nil, next(r)
 	})
 }

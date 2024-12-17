@@ -116,10 +116,12 @@ func (h *UsersHandler) Create(ctx context.Context, user *ScimUser) (*ScimUser, e
 
 	user.ID = addHuman.Details.ID
 	user.Resource = h.buildResourceForCommand(ctx, addHuman.Details)
+	user.Password = ""
 	return user, err
 }
 
 func (h *UsersHandler) Delete(ctx context.Context, id string) error {
+	// TODO if-match support
 	_, err := h.command.RemoveUserV2(ctx, id, nil)
 	return err
 }
@@ -135,6 +137,30 @@ func (h *UsersHandler) Get(ctx context.Context, id string) (*ScimUser, error) {
 		return nil, err
 	}
 	return h.mapToScimUser(ctx, user, metadata), nil
+}
+
+func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListResponse[*ScimUser], error) {
+	q := &query.UserSearchQueries{
+		SearchRequest: query.SearchRequest{
+			Offset: request.StartIndex - 1, // start index is 1 based
+			Limit:  request.Count,
+			Asc:    true,
+		},
+	}
+
+	// TODO permissionCheck?
+	users, err := h.query.SearchUsers(ctx, q, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO handle count 0 correct
+	if request.Count == 0 {
+		users.Users = make([]*query.User, 0)
+	}
+
+	scimUsers := h.mapToScimUsers(ctx, users.Users)
+	return newListResponse(users.SearchResponse, q.SearchRequest, scimUsers), nil
 }
 
 func (h *UsersHandler) queryMetadata(ctx context.Context, id string) (map[metadataKey][]byte, error) {

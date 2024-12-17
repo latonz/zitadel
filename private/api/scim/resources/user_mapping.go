@@ -57,7 +57,6 @@ func (h *UsersHandler) mapPrimaryEmail(scimUser *ScimUser) command.Email {
 			continue
 		}
 
-		// TODO verify
 		return command.Email{
 			Address:  domain.EmailAddress(email.Value),
 			Verified: h.config.EmailVerified,
@@ -73,7 +72,6 @@ func (h *UsersHandler) mapPrimaryPhone(scimUser *ScimUser) command.Phone {
 			continue
 		}
 
-		// TODO verify
 		return command.Phone{
 			Number:   domain.PhoneNumber(phone.Value),
 			Verified: h.config.PhoneVerified,
@@ -81,6 +79,15 @@ func (h *UsersHandler) mapPrimaryPhone(scimUser *ScimUser) command.Phone {
 	}
 
 	return command.Phone{}
+}
+
+func (h *UsersHandler) mapToScimUsers(ctx context.Context, users []*query.User) []*ScimUser {
+	result := make([]*ScimUser, len(users))
+	for i, user := range users {
+		result[i] = h.mapToScimUser(ctx, user, make(map[metadataKey][]byte))
+	}
+
+	return result
 }
 
 func (h *UsersHandler) mapToScimUser(ctx context.Context, user *query.User, metadata map[metadataKey][]byte) *ScimUser {
