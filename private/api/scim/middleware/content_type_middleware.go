@@ -1,4 +1,4 @@
-package scim
+package middleware
 
 import "net/http"
 

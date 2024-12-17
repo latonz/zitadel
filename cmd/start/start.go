@@ -526,7 +526,6 @@ func startAPIs(
 			middleware.CallDurationHandler,
 			instanceInterceptor.Handler,
 			middleware.AuthorizationInterceptor(verifier, config.InternalAuthZ).Handler,
-			userAgentInterceptor,
 			limitingAccessInterceptor.Handle))
 
 	c, err := console.Start(config.Console, config.ExternalSecure, oidcServer.IssuerFromRequest, middleware.CallDurationHandler, instanceInterceptor.Handler, limitingAccessInterceptor, config.CustomerPortal)
