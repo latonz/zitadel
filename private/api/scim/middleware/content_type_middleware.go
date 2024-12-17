@@ -1,15 +1,17 @@
 package middleware
 
-import "net/http"
+import (
+	api_http "github.com/zitadel/zitadel/internal/api/http"
+	"net/http"
+)
 
 const (
-	ContentTypeHeader = "Content-Type"
-	ContentTypeScim   = "application/scim+json"
+	ContentTypeScim = "application/scim+json"
 )
 
 func ContentTypeMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(ContentTypeHeader, ContentTypeScim)
+		w.Header().Set(api_http.ContentType, ContentTypeScim)
 		next.ServeHTTP(w, r)
 	})
 }

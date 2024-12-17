@@ -14,6 +14,7 @@ const (
 	CacheControl     = "cache-control"
 	ContentType      = "content-type"
 	ContentLength    = "content-length"
+	ContentLocation  = "content-location"
 	Expires          = "expires"
 	Location         = "location"
 	Origin           = "origin"

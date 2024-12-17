@@ -5,6 +5,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/api/authz"
+	api_http "github.com/zitadel/zitadel/internal/api/http"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/query"
 	"github.com/zitadel/zitadel/private/api/scim/middleware"
@@ -33,6 +34,7 @@ func buildHandler(command *command.Commands, query *query.Queries, middlewares [
 	}
 
 	router.Use(middleware.ContentTypeMiddleware)
+	router.Use(middleware.ContentTypeMiddleware)
 	mapResource[*resources.ScimUser](router, resources.UserResourceNamePlural, resources.NewUsersHandler(command, query))
 	return router
 }
@@ -51,8 +53,14 @@ func handleResourceResponse[T resources.ResourceHolder](next func(w http.Respons
 			return err
 		}
 
-		w.Header().Set("Location", entity.GetResource().Meta.Location)
-		w.Header().Set("ETag", entity.GetResource().Meta.Version)
+		resource := entity.GetResource()
+		if r.Header.Get(api_http.IfNoneMatch) == resource.Meta.Version {
+			w.WriteHeader(http.StatusNotModified)
+			return nil
+		}
+
+		w.Header().Set(api_http.ContentLocation, entity.GetResource().Meta.Location)
+		w.Header().Set(api_http.Etag, resource.Meta.Version)
 
 		err = json.NewEncoder(w).Encode(entity)
 		logging.OnError(err).Warn("scim error encoding failed")

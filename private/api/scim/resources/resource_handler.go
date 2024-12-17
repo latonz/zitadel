@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"github.com/zitadel/zitadel/internal/api/http"
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
 	"time"
 )
@@ -26,4 +27,8 @@ type ResourceMeta struct {
 
 type ResourceHolder interface {
 	GetResource() *Resource
+}
+
+func buildLocation(ctx context.Context, resourceName string, id string) string {
+	return http.DomainContext(ctx).Origin() + "/scim/v2/" + resourceName + "/" + id
 }

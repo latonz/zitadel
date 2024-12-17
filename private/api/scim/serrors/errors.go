@@ -49,15 +49,8 @@ func ErrorHandlerMiddleware(next func(http.ResponseWriter, *http.Request) error)
 			scimErr := mapToScimError(r.Context(), err)
 			w.WriteHeader(scimErr.Status)
 
-			resp, jsonErr := json.Marshal(scimErr)
-			if jsonErr != nil {
-				logging.WithError(jsonErr).Warn("Failed to marshal scim error response")
-				return
-			}
-
-			if _, err = w.Write(resp); err != nil {
-				logging.WithError(err).Warn("Failed to write scim error response body")
-			}
+			jsonErr := json.NewEncoder(w).Encode(scimErr)
+			logging.OnError(jsonErr).Warn("Failed to marshal scim error response")
 		}
 	}
 }

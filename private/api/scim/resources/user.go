@@ -67,7 +67,7 @@ func (h *UsersHandler) Get(ctx context.Context, id string) (*ScimUser, error) {
 		return nil, err
 	}
 
-	return mapToScimUser(user), nil
+	return mapToScimUser(ctx, user), nil
 }
 
 func (h *UsersHandler) Delete(ctx context.Context, id string) error {
@@ -75,7 +75,7 @@ func (h *UsersHandler) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func mapToScimUser(user *query.User) *ScimUser {
+func mapToScimUser(ctx context.Context, user *query.User) *ScimUser {
 	scimUser := &ScimUser{
 		Resource: &Resource{
 			Schemas: []schemas.ScimSchemaType{schemas.IdUser},
@@ -84,7 +84,7 @@ func mapToScimUser(user *query.User) *ScimUser {
 				Created:      user.CreationDate.UTC(),
 				LastModified: user.ChangeDate.UTC(),
 				Version:      strconv.FormatUint(user.Sequence, 10),
-				Location:     "",
+				Location:     buildLocation(ctx, UserResourceNamePlural, user.ID),
 			},
 		},
 		ID:         user.ID,
