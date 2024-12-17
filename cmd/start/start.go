@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	_ "embed"
 	"fmt"
+	"github.com/zitadel/zitadel/private/api/scim"
 	"math"
 	"net/http"
 	"os"
@@ -515,6 +516,18 @@ func startAPIs(
 		return nil, fmt.Errorf("unable to start saml provider: %w", err)
 	}
 	apis.RegisterHandlerOnPrefix(saml.HandlerPrefix, samlProvider.HttpHandler())
+
+	apis.RegisterHandlerOnPrefix(
+		scim.HandlerPrefix,
+		scim.NewServer(
+			commands,
+			queries,
+			verifier,
+			middleware.CallDurationHandler,
+			instanceInterceptor.Handler,
+			middleware.AuthorizationInterceptor(verifier, config.InternalAuthZ).Handler,
+			userAgentInterceptor,
+			limitingAccessInterceptor.Handle))
 
 	c, err := console.Start(config.Console, config.ExternalSecure, oidcServer.IssuerFromRequest, middleware.CallDurationHandler, instanceInterceptor.Handler, limitingAccessInterceptor, config.CustomerPortal)
 	if err != nil {

@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"github.com/gorilla/mux"
 	"net/http"
 
 	"github.com/zitadel/zitadel/internal/api/authz"
@@ -50,7 +51,8 @@ type httpReq struct{}
 
 func authorize(r *http.Request, verifier authz.APITokenVerifier, authConfig authz.Config) (_ context.Context, err error) {
 	ctx := r.Context()
-	authOpt, needsToken := verifier.CheckAuthMethod(r.Method + ":" + r.RequestURI)
+
+	authOpt, needsToken := CheckAuthMethod(r, verifier)
 	if !needsToken {
 		return ctx, nil
 	}
@@ -68,4 +70,24 @@ func authorize(r *http.Request, verifier authz.APITokenVerifier, authConfig auth
 	}
 	span.End()
 	return ctxSetter(ctx), nil
+}
+
+func CheckAuthMethod(r *http.Request, verifier authz.APITokenVerifier) (authz.Option, bool) {
+	authOpt, needsToken := verifier.CheckAuthMethod(r.Method + ":" + r.RequestURI)
+	if needsToken {
+		return authOpt, true
+	}
+
+	route := mux.CurrentRoute(r)
+	if route == nil {
+		return authOpt, false
+	}
+
+	pathTemplate, _ := route.GetPathTemplate()
+	if pathTemplate == "" {
+		return authOpt, false
+	}
+
+	// TODO
+	return verifier.CheckAuthMethod(r.Method + ":/scim/v2" + pathTemplate)
 }

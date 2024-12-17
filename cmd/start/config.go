@@ -1,6 +1,7 @@
 package start
 
 import (
+	"github.com/zitadel/zitadel/private/api/scim"
 	"time"
 
 	"github.com/mitchellh/mapstructure"
@@ -60,6 +61,7 @@ type Config struct {
 	UserAgentCookie     *middleware.UserAgentCookieConfig
 	OIDC                oidc.Config
 	SAML                saml.Config
+	SCIM                scim.Config
 	Login               login.Config
 	Console             console.Config
 	AssetStorage        static_config.AssetStorageConfig
