@@ -14,14 +14,17 @@ import (
 func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, error) {
 	human := &command.AddHuman{
 		Username:    scimUser.UserName,
-		FirstName:   scimUser.Name.GivenName,
-		LastName:    scimUser.Name.FamilyName,
 		NickName:    scimUser.NickName,
 		DisplayName: scimUser.DisplayName,
 		Password:    scimUser.Password,
 		Email:       h.mapPrimaryEmail(scimUser),
 		Phone:       h.mapPrimaryPhone(scimUser),
 		Metadata:    h.mapMetadata(scimUser),
+	}
+
+	if scimUser.Name != nil {
+		human.FirstName = scimUser.Name.GivenName
+		human.LastName = scimUser.Name.FamilyName
 	}
 
 	if err := domain.LanguageIsDefined(scimUser.PreferredLanguage); err != nil {

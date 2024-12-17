@@ -18,24 +18,26 @@ import (
 type scimErrorType = string
 
 type scimError struct {
-	Type         scimErrorType
-	Detail       string
-	Status       int
-	zitadelError *zerrors.ZitadelError
+	Schemas       []string      `json:"schemas"`
+	ScimType      scimErrorType `json:"scimType,omitempty"`
+	Detail        string        `json:"detail,omitempty"`
+	StatusCode    int           `json:"-"`
+	Status        string        `json:"status"`
+	ZitadelDetail errorDetail   `json:"urn:ietf:params:scim:api:zitadel:messages:2.0:ErrorDetail,omitempty"`
 }
 
-type scimJsonError struct {
-	Schemas       []string               `json:"schemas"`
-	ScimType      scimErrorType          `json:"scimType,omitempty"`
-	Detail        string                 `json:"detail,omitempty"`
-	Status        string                 `json:"status"`
-	ZitadelDetail zitadelJsonErrorDetail `json:"urn:ietf:params:scim:api:zitadel:messages:2.0:ErrorDetail,omitempty"`
-}
-
-type zitadelJsonErrorDetail struct {
+type errorDetail struct {
 	ID      string `json:"id"`
 	Message string `json:"message"`
 }
+
+const (
+	// ScimTypeInvalidValue A required value was missing,
+	// or the value specified was not compatible with the operation,
+	// or attribute type (see Section 2.2 of RFC7643),
+	// or resource schema (see Section 4 of RFC7643).
+	ScimTypeInvalidValue scimErrorType = "invalidValue"
+)
 
 var translator *i18n.Translator
 
@@ -47,7 +49,7 @@ func ErrorHandlerMiddleware(next func(http.ResponseWriter, *http.Request) error)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := next(w, r); err != nil {
 			scimErr := mapToScimError(r.Context(), err)
-			w.WriteHeader(scimErr.Status)
+			w.WriteHeader(scimErr.StatusCode)
 
 			jsonErr := json.NewEncoder(w).Encode(scimErr)
 			logging.OnError(jsonErr).Warn("Failed to marshal scim error response")
@@ -55,34 +57,18 @@ func ErrorHandlerMiddleware(next func(http.ResponseWriter, *http.Request) error)
 	}
 }
 
-func (err *scimError) UnmarshalJSON(_ []byte) error {
-	panic("UnmarshalJSON is not supported for json errors")
-}
-
-func (err *scimError) MarshalJSON() ([]byte, error) {
-	jsonErr := scimJsonError{
-		Schemas:  []string{schemas.IdError, schemas.IdZitadelErrorDetail},
-		ScimType: err.Type,
-		Detail:   err.Detail,
-		Status:   strconv.Itoa(err.Status),
-		ZitadelDetail: zitadelJsonErrorDetail{
-			ID:      err.zitadelError.GetID(),
-			Message: err.zitadelError.GetMessage(),
-		},
-	}
-	return json.Marshal(jsonErr)
-}
-
 func (err *scimError) Error() string {
-	return fmt.Sprintf("SCIM Error: %s: %s (%v)", err.Type, err.Detail, err.Status)
+	return fmt.Sprintf("SCIM Error: %s: %s (%v)", err.ScimType, err.Detail, err.Status)
 }
 
 func mapToScimError(ctx context.Context, err error) *scimError {
 	zitadelErr := new(zerrors.ZitadelError)
 	if ok := errors.As(err, &zitadelErr); !ok {
 		return &scimError{
-			Detail: err.Error(),
-			Status: http.StatusInternalServerError,
+			Schemas:    []string{schemas.IdError},
+			Detail:     err.Error(),
+			Status:     strconv.Itoa(http.StatusInternalServerError),
+			StatusCode: http.StatusInternalServerError,
 		}
 	}
 
@@ -93,8 +79,23 @@ func mapToScimError(ctx context.Context, err error) *scimError {
 
 	localizedMsg := translator.LocalizeFromCtx(ctx, zitadelErr.GetMessage(), nil)
 	return &scimError{
-		Detail:       localizedMsg,
-		Status:       statusCode,
-		zitadelError: zitadelErr,
+		Schemas:    []string{schemas.IdError, schemas.IdZitadelErrorDetail},
+		ScimType:   mapErrorToScimErrorType(err),
+		Detail:     localizedMsg,
+		StatusCode: statusCode,
+		Status:     strconv.Itoa(statusCode),
+		ZitadelDetail: errorDetail{
+			ID:      zitadelErr.GetID(),
+			Message: zitadelErr.GetMessage(),
+		},
+	}
+}
+
+func mapErrorToScimErrorType(err error) scimErrorType {
+	switch {
+	case zerrors.IsErrorInvalidArgument(err):
+		return ScimTypeInvalidValue
+	default:
+		return ""
 	}
 }
