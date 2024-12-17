@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"fmt"
 	"github.com/zitadel/zitadel/private/api/scim"
+	"github.com/zitadel/zitadel/private/api/scim/schemas"
 	"math"
 	"net/http"
 	"os"
@@ -518,11 +519,13 @@ func startAPIs(
 	apis.RegisterHandlerOnPrefix(saml.HandlerPrefix, samlProvider.HttpHandler())
 
 	apis.RegisterHandlerOnPrefix(
-		scim.HandlerPrefix,
+		schemas.HandlerPrefix,
 		scim.NewServer(
 			commands,
 			queries,
 			verifier,
+			keys.User,
+			&config.SCIM,
 			middleware.CallDurationHandler,
 			instanceInterceptor.Handler,
 			middleware.AuthorizationInterceptor(verifier, config.InternalAuthZ).Handler,

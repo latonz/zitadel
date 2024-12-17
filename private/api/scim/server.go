@@ -7,47 +7,72 @@ import (
 	"github.com/zitadel/zitadel/internal/api/authz"
 	api_http "github.com/zitadel/zitadel/internal/api/http"
 	"github.com/zitadel/zitadel/internal/command"
+	"github.com/zitadel/zitadel/internal/crypto"
 	"github.com/zitadel/zitadel/internal/query"
+	scim_config "github.com/zitadel/zitadel/private/api/scim/config"
 	"github.com/zitadel/zitadel/private/api/scim/middleware"
 	"github.com/zitadel/zitadel/private/api/scim/resources"
 	"github.com/zitadel/zitadel/private/api/scim/serrors"
 	"net/http"
 )
 
-const (
-	HandlerPrefix = "/scim/v2"
-)
-
 func NewServer(
 	command *command.Commands,
 	query *query.Queries,
 	verifier *authz.ApiTokenVerifier,
+	userCodeAlg crypto.EncryptionAlgorithm,
+	config *scim_config.Config,
 	middlewares ...func(next http.Handler) http.Handler) http.Handler {
 	verifier.RegisterServer("SCIM-V2", "scim/v2", AuthMapping)
-	return buildHandler(command, query, middlewares)
+	return buildHandler(command, query, userCodeAlg, config, middlewares)
 }
 
-func buildHandler(command *command.Commands, query *query.Queries, middlewares []func(next http.Handler) http.Handler) http.Handler {
+func buildHandler(
+	command *command.Commands,
+	query *query.Queries,
+	userCodeAlg crypto.EncryptionAlgorithm,
+	cfg *scim_config.Config,
+	middlewares []func(next http.Handler) http.Handler) http.Handler {
 	router := mux.NewRouter()
 	for _, m := range middlewares {
 		router.Use(m)
 	}
 
 	router.Use(middleware.ContentTypeMiddleware)
-	router.Use(middleware.ContentTypeMiddleware)
-	mapResource[*resources.ScimUser](router, resources.UserResourceNamePlural, resources.NewUsersHandler(command, query))
+	mapResource(router, resources.NewUsersHandler(command, query, userCodeAlg, cfg))
 	return router
 }
 
-func mapResource[T resources.ResourceHolder](router *mux.Router, resourceName string, handler resources.ResourceHandler[T]) {
+func mapResource[T resources.ResourceHolder](router *mux.Router, handler resources.ResourceHandler[T]) {
 	adapter := resources.NewResourceHandlerAdapter[T](handler)
-	resourceRouter := router.PathPrefix("/" + resourceName).Subrouter()
-	resourceRouter.HandleFunc("/{id}", serrors.ErrorHandlerMiddleware(handleResourceResponse(adapter.Get))).Methods(http.MethodGet)
+	resourceRouter := router.PathPrefix("/" + handler.ResourceNamePlural()).Subrouter()
+
+	// TODO remove write only attributes
+	resourceRouter.HandleFunc("", handleResourceCreatedResponse(adapter.Create)).Methods(http.MethodPost)
+	resourceRouter.HandleFunc("/{id}", handleResourceResponse(adapter.Get)).Methods(http.MethodGet)
 	resourceRouter.HandleFunc("/{id}", serrors.ErrorHandlerMiddleware(adapter.Delete)).Methods(http.MethodDelete)
 }
 
-func handleResourceResponse[T resources.ResourceHolder](next func(w http.ResponseWriter, r *http.Request) (T, error)) func(http.ResponseWriter, *http.Request) error {
-	return func(w http.ResponseWriter, r *http.Request) error {
+func handleResourceCreatedResponse[T resources.ResourceHolder](next func(w http.ResponseWriter, r *http.Request) (T, error)) func(http.ResponseWriter, *http.Request) {
+	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
+		entity, err := next(w, r)
+		if err != nil {
+			return err
+		}
+
+		resource := entity.GetResource()
+		w.Header().Set(api_http.Location, resource.Meta.Location)
+		w.Header().Set(api_http.Etag, resource.Meta.Version)
+		w.WriteHeader(http.StatusCreated)
+
+		err = json.NewEncoder(w).Encode(entity)
+		logging.OnError(err).Warn("scim error encoding failed")
+		return nil
+	})
+}
+
+func handleResourceResponse[T resources.ResourceHolder](next func(w http.ResponseWriter, r *http.Request) (T, error)) func(http.ResponseWriter, *http.Request) {
+	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
 		entity, err := next(w, r)
 		if err != nil {
 			return err
@@ -59,11 +84,11 @@ func handleResourceResponse[T resources.ResourceHolder](next func(w http.Respons
 			return nil
 		}
 
-		w.Header().Set(api_http.ContentLocation, entity.GetResource().Meta.Location)
+		w.Header().Set(api_http.ContentLocation, resource.Meta.Location)
 		w.Header().Set(api_http.Etag, resource.Meta.Version)
 
 		err = json.NewEncoder(w).Encode(entity)
 		logging.OnError(err).Warn("scim error encoding failed")
 		return nil
-	}
+	})
 }

@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"encoding/json"
 	"github.com/gorilla/mux"
 	"net/http"
 )
@@ -13,6 +14,14 @@ func NewResourceHandlerAdapter[T ResourceHolder](handler ResourceHandler[T]) *Re
 	return &ResourceHandlerAdapter[T]{
 		handler,
 	}
+}
+
+func (adapter *ResourceHandlerAdapter[T]) Create(_ http.ResponseWriter, r *http.Request) (T, error) {
+	// TODO validate according to schema
+
+	entity := adapter.handler.NewResource()
+	json.NewDecoder(r.Body).Decode(entity)
+	return adapter.handler.Create(r.Context(), entity)
 }
 
 func (adapter *ResourceHandlerAdapter[T]) Get(_ http.ResponseWriter, r *http.Request) (T, error) {

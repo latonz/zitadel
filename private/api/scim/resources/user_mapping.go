@@ -1,0 +1,204 @@
+package resources
+
+import (
+	"context"
+	"github.com/zitadel/zitadel/internal/command"
+	"github.com/zitadel/zitadel/internal/domain"
+	"github.com/zitadel/zitadel/internal/i18n"
+	"github.com/zitadel/zitadel/internal/query"
+	"github.com/zitadel/zitadel/private/api/scim/schemas"
+	"golang.org/x/text/language"
+	"strconv"
+)
+
+func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, error) {
+	human := &command.AddHuman{
+		Username:    scimUser.UserName,
+		FirstName:   scimUser.Name.GivenName,
+		LastName:    scimUser.Name.FamilyName,
+		NickName:    scimUser.NickName,
+		DisplayName: scimUser.DisplayName,
+		Password:    scimUser.Password,
+		Email:       h.mapPrimaryEmail(scimUser),
+		Phone:       h.mapPrimaryPhone(scimUser),
+		Metadata:    h.mapMetadata(scimUser),
+	}
+
+	if err := domain.LanguageIsDefined(scimUser.PreferredLanguage); err != nil {
+		scimUser.PreferredLanguage = language.English
+	} else if err := domain.LanguagesAreSupported(i18n.SupportedLanguages(), scimUser.PreferredLanguage); err != nil {
+		return nil, err
+	}
+
+	return human, nil
+}
+
+func (h *UsersHandler) mapMetadata(user *ScimUser) []*command.AddMetadataEntry {
+	metadata := make([]*command.AddMetadataEntry, 0, len(allRelevantMetadataKeys))
+	for _, key := range allRelevantMetadataKeys {
+		value := getValueForMetadataKey(user, key)
+		if value != "" {
+			metadata = append(metadata, &command.AddMetadataEntry{
+				Key:   key,
+				Value: []byte(value),
+			})
+		}
+	}
+
+	return metadata
+}
+
+func (h *UsersHandler) mapPrimaryEmail(scimUser *ScimUser) command.Email {
+	for _, email := range scimUser.Emails {
+		if !email.Primary {
+			continue
+		}
+
+		// TODO verify
+		return command.Email{
+			Address:  domain.EmailAddress(email.Value),
+			Verified: h.config.EmailVerified,
+		}
+	}
+
+	return command.Email{}
+}
+
+func (h *UsersHandler) mapPrimaryPhone(scimUser *ScimUser) command.Phone {
+	for _, phone := range scimUser.PhoneNumbers {
+		if !phone.Primary {
+			continue
+		}
+
+		// TODO verify
+		return command.Phone{
+			Number:   domain.PhoneNumber(phone.Value),
+			Verified: h.config.PhoneVerified,
+		}
+	}
+
+	return command.Phone{}
+}
+
+func (h *UsersHandler) mapToScimUser(ctx context.Context, user *query.User, metadata map[metadataKey][]byte) *ScimUser {
+	scimUser := &ScimUser{
+		Resource:   h.buildResourceForQuery(ctx, user),
+		ID:         user.ID,
+		ExternalID: extractMetadata(metadata, metadataKeyExternalId),
+		UserName:   user.Username,
+		ProfileUrl: extractMetadata(metadata, metadataKeyProfileUrl),
+		Title:      extractMetadata(metadata, metadataKeyTitle),
+		Locale:     extractMetadata(metadata, metadataKeyLocale),
+		Timezone:   extractMetadata(metadata, metadataKeyTimezone),
+		Active:     user.State.IsEnabled(),
+	}
+
+	if user.Human != nil {
+		mapHumanToScimUser(user.Human, scimUser, metadata)
+	}
+	return scimUser
+}
+
+func mapHumanToScimUser(human *query.Human, user *ScimUser, metadata map[metadataKey][]byte) {
+	user.DisplayName = human.DisplayName
+	user.NickName = human.NickName
+	user.PreferredLanguage = human.PreferredLanguage
+	user.Name = &ScimUserName{
+		Formatted:       human.DisplayName,
+		FamilyName:      human.LastName,
+		GivenName:       human.FirstName,
+		MiddleName:      extractMetadata(metadata, metadataKeyMiddleName),
+		HonorificPrefix: extractMetadata(metadata, metadataKeyHonorificPrefix),
+		HonorificSuffix: extractMetadata(metadata, metadataKeyHonorificSuffix),
+	}
+
+	if string(human.Email) != "" {
+		user.Emails = []*ScimEmail{
+			{
+				Value:   string(human.Email),
+				Primary: true,
+			},
+		}
+	}
+
+	if string(human.Phone) != "" {
+		user.PhoneNumbers = []*ScimPhoneNumber{
+			{
+				Value:   string(human.Phone),
+				Primary: true,
+			},
+		}
+	}
+}
+
+func (h *UsersHandler) buildResourceForCommand(ctx context.Context, userDetails *domain.ObjectDetails) *Resource {
+	created := userDetails.CreationDate.UTC()
+	if created.IsZero() {
+		created = userDetails.EventDate.UTC()
+	}
+
+	return &Resource{
+		Schemas: []schemas.ScimSchemaType{schemas.IdUser},
+		Meta: &ResourceMeta{
+			ResourceType: userResourceNameSingular,
+			Created:      created,
+			LastModified: userDetails.EventDate.UTC(),
+			Version:      strconv.FormatUint(userDetails.Sequence, 10),
+			Location:     buildLocation(ctx, h, userDetails.ID),
+		},
+	}
+}
+
+func (h *UsersHandler) buildResourceForQuery(ctx context.Context, user *query.User) *Resource {
+	return &Resource{
+		Schemas: []schemas.ScimSchemaType{schemas.IdUser},
+		Meta: &ResourceMeta{
+			ResourceType: userResourceNameSingular,
+			Created:      user.CreationDate.UTC(),
+			LastModified: user.ChangeDate.UTC(),
+			Version:      strconv.FormatUint(user.Sequence, 10),
+			Location:     buildLocation(ctx, h, user.ID),
+		},
+	}
+}
+
+func getValueForMetadataKey(user *ScimUser, key metadataKey) string {
+	switch key {
+	case metadataKeyMiddleName:
+		if user.Name == nil {
+			return ""
+		}
+		return user.Name.MiddleName
+	case metadataKeyHonorificPrefix:
+		if user.Name == nil {
+			return ""
+		}
+		return user.Name.HonorificPrefix
+	case metadataKeyHonorificSuffix:
+		if user.Name == nil {
+			return ""
+		}
+		return user.Name.HonorificSuffix
+	case metadataKeyExternalId:
+		return user.ExternalID
+	case metadataKeyProfileUrl:
+		return user.ProfileUrl
+	case metadataKeyTitle:
+		return user.Title
+	case metadataKeyLocale:
+		return user.Locale
+	case metadataKeyTimezone:
+		return user.Timezone
+	}
+
+	return ""
+}
+
+func extractMetadata(metadata map[metadataKey][]byte, key metadataKey) string {
+	val, ok := metadata[key]
+	if !ok {
+		return ""
+	}
+
+	return string(val)
+}

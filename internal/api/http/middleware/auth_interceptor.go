@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/gorilla/mux"
 	"net/http"
+	"strings"
 
 	"github.com/zitadel/zitadel/internal/api/authz"
 	http_util "github.com/zitadel/zitadel/internal/api/http"
@@ -83,11 +84,10 @@ func CheckAuthMethod(r *http.Request, verifier authz.APITokenVerifier) (authz.Op
 		return authOpt, false
 	}
 
-	pathTemplate, _ := route.GetPathTemplate()
-	if pathTemplate == "" {
-		return authOpt, false
+	if strings.Contains(r.RequestURI, "/scim/v2") {
+		return authz.Option{
+			Permission: "authenticated",
+		}, true
 	}
-
-	// TODO
-	return verifier.CheckAuthMethod(r.Method + ":/scim/v2" + pathTemplate)
+	return authOpt, false
 }

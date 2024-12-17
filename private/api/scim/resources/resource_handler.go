@@ -8,8 +8,12 @@ import (
 )
 
 type ResourceHandler[T ResourceHolder] interface {
-	Get(ctx context.Context, id string) (T, error)
+	ResourceNamePlural() string
+	NewResource() T
+
+	Create(ctx context.Context, resource T) (T, error)
 	Delete(ctx context.Context, id string) error
+	Get(ctx context.Context, id string) (T, error)
 }
 
 type Resource struct {
@@ -29,6 +33,6 @@ type ResourceHolder interface {
 	GetResource() *Resource
 }
 
-func buildLocation(ctx context.Context, resourceName string, id string) string {
-	return http.DomainContext(ctx).Origin() + "/scim/v2/" + resourceName + "/" + id
+func buildLocation[T ResourceHolder](ctx context.Context, handler ResourceHandler[T], id string) string {
+	return http.DomainContext(ctx).Origin() + schemas.HandlerPrefix + "/" + handler.ResourceNamePlural() + "/" + id
 }

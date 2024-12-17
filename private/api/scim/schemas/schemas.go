@@ -10,4 +10,6 @@ const (
 	IdUser               ScimSchemaType = idPrefixCore + "User"
 	IdError              ScimSchemaType = idPrefixMessages + "Error"
 	IdZitadelErrorDetail ScimSchemaType = idPrefixZitadelMessages + "ErrorDetail"
+
+	HandlerPrefix = "/scim/v2"
 )
