@@ -2,18 +2,41 @@ package resources
 
 import (
 	"context"
+	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/query"
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
 	"golang.org/x/text/language"
-	"net/url"
 	"strconv"
 )
+
+type metadataKey = string
 
 const (
 	UserResourceNameSingular = "User"
 	UserResourceNamePlural   = "Users"
+
+	// TODO scoping?
+	metadataKeyMiddleName      metadataKey = "name.middleName"
+	metadataKeyHonorificPrefix             = "name.honorificPrefix"
+	metadataKeyHonorificSuffix             = "name.honorificSuffix"
+	metadataKeyExternalId                  = "externalId"
+	metadataKeyProfileUrl                  = "profileURL"
+	metadataKeyTitle                       = "title"
+	metadataKeyLocale                      = "locale"
+	metadataKeyTimezone                    = "timezone"
 )
+
+var allRelevantMetadataKeys = []metadataKey{
+	metadataKeyMiddleName,
+	metadataKeyHonorificPrefix,
+	metadataKeyHonorificSuffix,
+	metadataKeyExternalId,
+	metadataKeyProfileUrl,
+	metadataKeyTitle,
+	metadataKeyLocale,
+	metadataKeyTimezone,
+}
 
 type UsersHandler struct {
 	command *command.Commands
@@ -28,7 +51,7 @@ type ScimUser struct {
 	Name              *ScimUserName      `json:"name,omitempty"`
 	DisplayName       string             `json:"displayName,omitempty"`
 	NickName          string             `json:"nickName,omitempty"`
-	ProfileUrl        *url.URL           `json:"profileUrl,omitempty"`
+	ProfileUrl        string             `json:"profileUrl,omitempty"`
 	Title             string             `json:"title,omitempty"`
 	PreferredLanguage language.Tag       `json:"preferredLanguage,omitempty"`
 	Locale            string             `json:"locale,omitempty"`
@@ -36,6 +59,8 @@ type ScimUser struct {
 	Active            bool               `json:"active,omitempty"`
 	Emails            []*ScimEmail       `json:"emails,omitempty"`
 	PhoneNumbers      []*ScimPhoneNumber `json:"phoneNumbers,omitempty"`
+
+	// TODO add ims and later attributes
 }
 
 type ScimEmail struct {
@@ -67,7 +92,11 @@ func (h *UsersHandler) Get(ctx context.Context, id string) (*ScimUser, error) {
 		return nil, err
 	}
 
-	return mapToScimUser(ctx, user), nil
+	metadata, err := h.queryMetadata(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return mapToScimUser(ctx, user, metadata), nil
 }
 
 func (h *UsersHandler) Delete(ctx context.Context, id string) error {
@@ -75,7 +104,40 @@ func (h *UsersHandler) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func mapToScimUser(ctx context.Context, user *query.User) *ScimUser {
+func (h *UsersHandler) queryMetadata(ctx context.Context, id string) (map[metadataKey][]byte, error) {
+	keyQueries := make([]query.SearchQuery, len(allRelevantMetadataKeys))
+	for i, key := range allRelevantMetadataKeys {
+		keyQueries[i] = buildMetadataKeyQuery(key)
+	}
+
+	queries := &query.UserMetadataSearchQueries{
+		SearchRequest: query.SearchRequest{},
+		Queries:       []query.SearchQuery{query.Or(keyQueries...)},
+	}
+
+	metadata, err := h.query.SearchUserMetadata(ctx, false, id, queries, false)
+	if err != nil {
+		return nil, err
+	}
+
+	metadataMap := make(map[string][]byte, len(metadata.Metadata))
+	for _, entry := range metadata.Metadata {
+		metadataMap[entry.Key] = entry.Value
+	}
+
+	return metadataMap, nil
+}
+
+func buildMetadataKeyQuery(key metadataKey) query.SearchQuery {
+	q, err := query.NewUserMetadataKeySearchQuery(key, query.TextEquals)
+	if err != nil {
+		logging.Panic("Error build user metadata query for key " + key)
+	}
+
+	return q
+}
+
+func mapToScimUser(ctx context.Context, user *query.User, metadata map[metadataKey][]byte) *ScimUser {
 	scimUser := &ScimUser{
 		Resource: &Resource{
 			Schemas: []schemas.ScimSchemaType{schemas.IdUser},
@@ -88,22 +150,22 @@ func mapToScimUser(ctx context.Context, user *query.User) *ScimUser {
 			},
 		},
 		ID:         user.ID,
-		ExternalID: "", // TODO from metadata
+		ExternalID: mapFromMetadata(metadata, metadataKeyExternalId),
 		UserName:   user.Username,
-		ProfileUrl: nil, // TODO from metadata
-		Title:      "",  // TODO from metadata
-		Locale:     "",  // TODO from metadata
-		Timezone:   "",  // TODO from metadata
+		ProfileUrl: mapFromMetadata(metadata, metadataKeyProfileUrl),
+		Title:      mapFromMetadata(metadata, metadataKeyTitle),
+		Locale:     mapFromMetadata(metadata, metadataKeyLocale),
+		Timezone:   mapFromMetadata(metadata, metadataKeyTimezone),
 		Active:     user.State.IsEnabled(),
 	}
 
 	if user.Human != nil {
-		mapHuman(user.Human, scimUser)
+		mapHuman(user.Human, scimUser, metadata)
 	}
 	return scimUser
 }
 
-func mapHuman(human *query.Human, user *ScimUser) {
+func mapHuman(human *query.Human, user *ScimUser, metadata map[metadataKey][]byte) {
 	user.DisplayName = human.DisplayName
 	user.NickName = human.NickName
 	user.PreferredLanguage = human.PreferredLanguage
@@ -111,9 +173,9 @@ func mapHuman(human *query.Human, user *ScimUser) {
 		Formatted:       human.DisplayName,
 		FamilyName:      human.LastName,
 		GivenName:       human.FirstName,
-		MiddleName:      "", // TODO from metadata
-		HonorificPrefix: "", // TODO from metadata
-		HonorificSuffix: "", // TODO from metadata
+		MiddleName:      mapFromMetadata(metadata, metadataKeyMiddleName),
+		HonorificPrefix: mapFromMetadata(metadata, metadataKeyHonorificPrefix),
+		HonorificSuffix: mapFromMetadata(metadata, metadataKeyHonorificSuffix),
 	}
 
 	if string(human.Email) != "" {
@@ -133,6 +195,15 @@ func mapHuman(human *query.Human, user *ScimUser) {
 			},
 		}
 	}
+}
+
+func mapFromMetadata(metadata map[metadataKey][]byte, key metadataKey) string {
+	val, ok := metadata[key]
+	if !ok {
+		return ""
+	}
+
+	return string(val)
 }
 
 func (u *ScimUser) GetResource() *Resource {
