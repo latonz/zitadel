@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/api/authz"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/crypto"
@@ -11,33 +10,6 @@ import (
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
 	"golang.org/x/text/language"
 )
-
-type metadataKey = string
-
-const (
-	userResourceNameSingular = "User"
-	userResourceNamePlural   = "Users"
-
-	metadataKeyMiddleName      metadataKey = metadataKeyPrefix + "name.middleName"
-	metadataKeyHonorificPrefix             = metadataKeyPrefix + "name.honorificPrefix"
-	metadataKeyHonorificSuffix             = metadataKeyPrefix + "name.honorificSuffix"
-	metadataKeyExternalId                  = metadataKeyPrefix + "externalId"
-	metadataKeyProfileUrl                  = metadataKeyPrefix + "profileURL"
-	metadataKeyTitle                       = metadataKeyPrefix + "title"
-	metadataKeyLocale                      = metadataKeyPrefix + "locale"
-	metadataKeyTimezone                    = metadataKeyPrefix + "timezone"
-)
-
-var allRelevantMetadataKeys = []metadataKey{
-	metadataKeyMiddleName,
-	metadataKeyHonorificPrefix,
-	metadataKeyHonorificSuffix,
-	metadataKeyExternalId,
-	metadataKeyProfileUrl,
-	metadataKeyTitle,
-	metadataKeyLocale,
-	metadataKeyTimezone,
-}
 
 type UsersHandler struct {
 	command     *command.Commands
@@ -140,7 +112,7 @@ func (h *UsersHandler) Get(ctx context.Context, id string) (*ScimUser, error) {
 		return nil, err
 	}
 
-	metadata, err := h.queryMetadata(ctx, id)
+	metadata, err := h.queryMetadataForUser(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -167,45 +139,17 @@ func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListRes
 		users.Users = make([]*query.User, 0)
 	}
 
-	scimUsers := h.mapToScimUsers(ctx, users.Users)
+	metadata, err := h.queryMetadataForUsers(ctx, userIDs(users.Users))
+	if err != nil {
+		return nil, err
+	}
+
+	scimUsers := h.mapToScimUsers(ctx, users.Users, metadata)
 	return newListResponse(users.SearchResponse, q.SearchRequest, scimUsers), nil
 }
 
 func (u *ScimUser) GetResource() *Resource {
 	return u.Resource
-}
-
-func (h *UsersHandler) queryMetadata(ctx context.Context, id string) (map[metadataKey][]byte, error) {
-	keyQueries := make([]query.SearchQuery, len(allRelevantMetadataKeys))
-	for i, key := range allRelevantMetadataKeys {
-		keyQueries[i] = buildMetadataKeyQuery(key)
-	}
-
-	queries := &query.UserMetadataSearchQueries{
-		SearchRequest: query.SearchRequest{},
-		Queries:       []query.SearchQuery{query.Or(keyQueries...)},
-	}
-
-	metadata, err := h.query.SearchUserMetadata(ctx, false, id, queries, false)
-	if err != nil {
-		return nil, err
-	}
-
-	metadataMap := make(map[string][]byte, len(metadata.Metadata))
-	for _, entry := range metadata.Metadata {
-		metadataMap[entry.Key] = entry.Value
-	}
-
-	return metadataMap, nil
-}
-
-func buildMetadataKeyQuery(key metadataKey) query.SearchQuery {
-	q, err := query.NewUserMetadataKeySearchQuery(key, query.TextEquals)
-	if err != nil {
-		logging.Panic("Error build user metadata query for key " + key)
-	}
-
-	return q
 }
 
 func (h *UsersHandler) queryUserDependencies(ctx context.Context, userID string) ([]*command.CascadingMembership, []string, error) {

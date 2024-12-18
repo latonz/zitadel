@@ -42,21 +42,6 @@ func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, err
 	return human, nil
 }
 
-func (h *UsersHandler) mapMetadata(user *ScimUser) []*command.AddMetadataEntry {
-	metadata := make([]*command.AddMetadataEntry, 0, len(allRelevantMetadataKeys))
-	for _, key := range allRelevantMetadataKeys {
-		value := getValueForMetadataKey(user, key)
-		if value != "" {
-			metadata = append(metadata, &command.AddMetadataEntry{
-				Key:   key,
-				Value: []byte(value),
-			})
-		}
-	}
-
-	return metadata
-}
-
 func (h *UsersHandler) mapPrimaryEmail(scimUser *ScimUser) command.Email {
 	for _, email := range scimUser.Emails {
 		if !email.Primary {
@@ -87,11 +72,15 @@ func (h *UsersHandler) mapPrimaryPhone(scimUser *ScimUser) command.Phone {
 	return command.Phone{}
 }
 
-func (h *UsersHandler) mapToScimUsers(ctx context.Context, users []*query.User) []*ScimUser {
+func (h *UsersHandler) mapToScimUsers(ctx context.Context, users []*query.User, metadata map[string]map[metadataKey][]byte) []*ScimUser {
 	result := make([]*ScimUser, len(users))
 	for i, user := range users {
-		// TODO load metadata
-		result[i] = h.mapToScimUser(ctx, user, make(map[metadataKey][]byte))
+		userMetadata, ok := metadata[user.ID]
+		if !ok {
+			userMetadata = make(map[metadataKey][]byte)
+		}
+
+		result[i] = h.mapToScimUser(ctx, user, userMetadata)
 	}
 
 	return result
@@ -179,47 +168,6 @@ func (h *UsersHandler) buildResourceForQuery(ctx context.Context, user *query.Us
 	}
 }
 
-func getValueForMetadataKey(user *ScimUser, key metadataKey) string {
-	switch key {
-	case metadataKeyMiddleName:
-		if user.Name == nil {
-			return ""
-		}
-		return user.Name.MiddleName
-	case metadataKeyHonorificPrefix:
-		if user.Name == nil {
-			return ""
-		}
-		return user.Name.HonorificPrefix
-	case metadataKeyHonorificSuffix:
-		if user.Name == nil {
-			return ""
-		}
-		return user.Name.HonorificSuffix
-	case metadataKeyExternalId:
-		return user.ExternalID
-	case metadataKeyProfileUrl:
-		return user.ProfileUrl
-	case metadataKeyTitle:
-		return user.Title
-	case metadataKeyLocale:
-		return user.Locale
-	case metadataKeyTimezone:
-		return user.Timezone
-	}
-
-	return ""
-}
-
-func extractMetadata(metadata map[metadataKey][]byte, key metadataKey) string {
-	val, ok := metadata[key]
-	if !ok {
-		return ""
-	}
-
-	return string(val)
-}
-
 func cascadingMemberships(memberships []*query.Membership) []*command.CascadingMembership {
 	cascades := make([]*command.CascadingMembership, len(memberships))
 	for i, membership := range memberships {
@@ -269,4 +217,12 @@ func userGrantsToIDs(userGrants []*query.UserGrant) []string {
 		converted[i] = grant.ID
 	}
 	return converted
+}
+
+func userIDs(users []*query.User) []string {
+	ids := make([]string, len(users))
+	for i, user := range users {
+		ids[i] = user.ID
+	}
+	return ids
 }

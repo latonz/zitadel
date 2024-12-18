@@ -24,6 +24,7 @@ type UserMetadataList struct {
 
 type UserMetadata struct {
 	CreationDate  time.Time `json:"creation_date,omitempty"`
+	UserID        string    `json:"-"`
 	ChangeDate    time.Time `json:"change_date,omitempty"`
 	ResourceOwner string    `json:"resource_owner,omitempty"`
 	Sequence      uint64    `json:"sequence,omitempty"`
@@ -104,6 +105,38 @@ func (q *Queries) GetUserMetadataByKey(ctx context.Context, shouldTriggerBulk bo
 		metadata, err = scan(row)
 		return err
 	}, stmt, args...)
+	return metadata, err
+}
+
+func (q *Queries) SearchUserMetadataForUsers(ctx context.Context, shouldTriggerBulk bool, userIDs []string, queries *UserMetadataSearchQueries) (metadata *UserMetadataList, err error) {
+	ctx, span := tracing.NewSpan(ctx)
+	defer func() { span.EndWithError(err) }()
+
+	if shouldTriggerBulk {
+		_, traceSpan := tracing.NewNamedSpan(ctx, "TriggerUserMetadataProjection")
+		ctx, err = projection.UserMetadataProjection.Trigger(ctx, handler.WithAwaitRunning())
+		logging.OnError(err).Debug("trigger failed")
+		traceSpan.EndWithError(err)
+	}
+
+	query, scan := prepareUserMetadataListQuery(ctx, q.client)
+	eq := sq.Eq{
+		UserMetadataUserIDCol.identifier():     userIDs,
+		UserMetadataInstanceIDCol.identifier(): authz.GetInstance(ctx).InstanceID(),
+	}
+	stmt, args, err := queries.toQuery(query).Where(eq).ToSql()
+	if err != nil {
+		return nil, zerrors.ThrowInternal(err, "QUERY-Egbgd", "Errors.Query.SQLStatment")
+	}
+
+	err = q.client.QueryContext(ctx, func(rows *sql.Rows) error {
+		metadata, err = scan(rows)
+		return err
+	}, stmt, args...)
+	if err != nil {
+		return nil, err
+	}
+	metadata.State, err = q.latestState(ctx, userMetadataTable)
 	return metadata, err
 }
 
@@ -200,6 +233,7 @@ func prepareUserMetadataListQuery(ctx context.Context, db prepareDatabase) (sq.S
 	return sq.Select(
 			UserMetadataCreationDateCol.identifier(),
 			UserMetadataChangeDateCol.identifier(),
+			UserMetadataUserIDCol.identifier(),
 			UserMetadataResourceOwnerCol.identifier(),
 			UserMetadataSequenceCol.identifier(),
 			UserMetadataKeyCol.identifier(),
@@ -215,6 +249,7 @@ func prepareUserMetadataListQuery(ctx context.Context, db prepareDatabase) (sq.S
 				err := rows.Scan(
 					&m.CreationDate,
 					&m.ChangeDate,
+					&m.UserID,
 					&m.ResourceOwner,
 					&m.Sequence,
 					&m.Key,
