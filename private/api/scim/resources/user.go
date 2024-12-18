@@ -125,7 +125,6 @@ func (h *UsersHandler) Create(ctx context.Context, user *ScimUser) (*ScimUser, e
 }
 
 func (h *UsersHandler) Delete(ctx context.Context, id string) error {
-	// TODO if-match support
 	_, err := h.command.RemoveUserV2(ctx, id, nil)
 	return err
 }
@@ -158,7 +157,7 @@ func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListRes
 		return nil, err
 	}
 
-	// TODO handle count 0 correct
+	// TODO handle count 0 without loading rows
 	if request.Count == 0 {
 		users.Users = make([]*query.User, 0)
 	}

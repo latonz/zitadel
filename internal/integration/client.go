@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"github.com/zitadel/zitadel/internal/integration/scim"
 	"testing"
 	"time"
 
@@ -65,6 +66,7 @@ type Client struct {
 	WebKeyV3Alpha  webkey_v3alpha.ZITADELWebKeysClient
 	IDPv2          idp_pb.IdentityProviderServiceClient
 	UserV3Alpha    user_v3alpha.ZITADELUsersClient
+	SCIM           *scim.Client
 }
 
 func newClient(ctx context.Context, target string) (*Client, error) {
@@ -96,6 +98,7 @@ func newClient(ctx context.Context, target string) (*Client, error) {
 		WebKeyV3Alpha:  webkey_v3alpha.NewZITADELWebKeysClient(cc),
 		IDPv2:          idp_pb.NewIdentityProviderServiceClient(cc),
 		UserV3Alpha:    user_v3alpha.NewZITADELUsersClient(cc),
+		SCIM:           scim.NewScimClient(target),
 	}
 	return client, client.pollHealth(ctx)
 }
