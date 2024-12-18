@@ -137,7 +137,6 @@ func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListRes
 		return newListResponse(count, q.SearchRequest, make([]*ScimUser, 0)), nil
 	}
 
-	// TODO permissionCheck?
 	users, err := h.query.SearchUsers(ctx, q, nil)
 	if err != nil {
 		return nil, err
