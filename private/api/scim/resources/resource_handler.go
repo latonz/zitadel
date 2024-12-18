@@ -7,9 +7,14 @@ import (
 	"time"
 )
 
+const (
+	metadataKeyPrefix = "urn:zitadel:scim:"
+)
+
 type ResourceHandler[T ResourceHolder] interface {
 	ResourceNamePlural() string
 	NewResource() T
+	Schema() schemas.ScimSchemaType
 
 	Create(ctx context.Context, resource T) (T, error)
 	Delete(ctx context.Context, id string) error

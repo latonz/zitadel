@@ -8,6 +8,7 @@ import (
 	"github.com/zitadel/zitadel/internal/crypto"
 	"github.com/zitadel/zitadel/internal/query"
 	scim_config "github.com/zitadel/zitadel/private/api/scim/config"
+	"github.com/zitadel/zitadel/private/api/scim/schemas"
 	"golang.org/x/text/language"
 )
 
@@ -17,15 +18,14 @@ const (
 	userResourceNameSingular = "User"
 	userResourceNamePlural   = "Users"
 
-	// TODO scoping?
-	metadataKeyMiddleName      metadataKey = "name.middleName"
-	metadataKeyHonorificPrefix             = "name.honorificPrefix"
-	metadataKeyHonorificSuffix             = "name.honorificSuffix"
-	metadataKeyExternalId                  = "externalId"
-	metadataKeyProfileUrl                  = "profileURL"
-	metadataKeyTitle                       = "title"
-	metadataKeyLocale                      = "locale"
-	metadataKeyTimezone                    = "timezone"
+	metadataKeyMiddleName      metadataKey = metadataKeyPrefix + "name.middleName"
+	metadataKeyHonorificPrefix             = metadataKeyPrefix + "name.honorificPrefix"
+	metadataKeyHonorificSuffix             = metadataKeyPrefix + "name.honorificSuffix"
+	metadataKeyExternalId                  = metadataKeyPrefix + "externalId"
+	metadataKeyProfileUrl                  = metadataKeyPrefix + "profileURL"
+	metadataKeyTitle                       = metadataKeyPrefix + "title"
+	metadataKeyLocale                      = metadataKeyPrefix + "locale"
+	metadataKeyTimezone                    = metadataKeyPrefix + "timezone"
 )
 
 var allRelevantMetadataKeys = []metadataKey{
@@ -100,6 +100,10 @@ func (h *UsersHandler) ResourceNamePlural() string {
 
 func (h *UsersHandler) NewResource() *ScimUser {
 	return &ScimUser{}
+}
+
+func (h *UsersHandler) Schema() schemas.ScimSchemaType {
+	return schemas.IdUser
 }
 
 func (h *UsersHandler) Create(ctx context.Context, user *ScimUser) (*ScimUser, error) {

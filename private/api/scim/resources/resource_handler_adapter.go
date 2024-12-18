@@ -7,7 +7,9 @@ import (
 	"github.com/zitadel/zitadel/internal/query"
 	"github.com/zitadel/zitadel/internal/zerrors"
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
+	"github.com/zitadel/zitadel/private/api/scim/serrors"
 	"net/http"
+	"slices"
 )
 
 const (
@@ -61,7 +63,16 @@ func (adapter *ResourceHandlerAdapter[T]) Create(r *http.Request) (T, error) {
 	entity := adapter.handler.NewResource()
 	err := json.NewDecoder(r.Body).Decode(entity)
 	if err != nil {
-		return entity, zerrors.ThrowInvalidArgument(nil, "SCIM-ucrjson", "Could not deserialize json: "+err.Error())
+		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgumentf(nil, "SCIM-ucrjson", "Could not deserialize json: %v", err.Error()))
+	}
+
+	resource := entity.GetResource()
+	if resource == nil {
+		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgument(nil, "SCIM-xxrjson", "Could not get resource"))
+	}
+
+	if !slices.Contains(resource.Schemas, adapter.handler.Schema()) {
+		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgumentf(nil, "SCIM-xxrschema", "Expected schema %v is not provided", adapter.handler.Schema()))
 	}
 
 	return adapter.handler.Create(r.Context(), entity)

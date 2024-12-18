@@ -18,6 +18,11 @@ import (
 type scimErrorType = string
 
 type scimError struct {
+	Parent   error
+	ScimType scimErrorType
+}
+
+type scimJsonError struct {
 	Schemas       []string      `json:"schemas"`
 	ScimType      scimErrorType `json:"scimType,omitempty"`
 	Detail        string        `json:"detail,omitempty"`
@@ -37,6 +42,10 @@ const (
 	// or attribute type (see Section 2.2 of RFC7643),
 	// or resource schema (see Section 4 of RFC7643).
 	ScimTypeInvalidValue scimErrorType = "invalidValue"
+
+	// ScimTypeInvalidSyntax The request body message structure was invalid or did
+	// not conform to the request schema.
+	ScimTypeInvalidSyntax scimErrorType = "invalidSyntax"
 )
 
 var translator *i18n.Translator
@@ -48,7 +57,7 @@ func ErrorHandlerMiddleware(next func(http.ResponseWriter, *http.Request) error)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := next(w, r); err != nil {
-			scimErr := mapToScimError(r.Context(), err)
+			scimErr := mapToScimJsonError(r.Context(), err)
 			w.WriteHeader(scimErr.StatusCode)
 
 			jsonErr := json.NewEncoder(w).Encode(scimErr)
@@ -57,14 +66,28 @@ func ErrorHandlerMiddleware(next func(http.ResponseWriter, *http.Request) error)
 	}
 }
 
-func (err *scimError) Error() string {
-	return fmt.Sprintf("SCIM Error: %s: %s (%v)", err.ScimType, err.Detail, err.Status)
+func ThrowInvalidSyntax(parent error) error {
+	return &scimError{
+		Parent:   parent,
+		ScimType: ScimTypeInvalidSyntax,
+	}
 }
 
-func mapToScimError(ctx context.Context, err error) *scimError {
+func (err *scimError) Error() string {
+	return fmt.Sprintf("SCIM Error: %s: %s", err.ScimType, err.Parent.Error())
+}
+
+func mapToScimJsonError(ctx context.Context, err error) *scimJsonError {
+	scimErr := new(scimError)
+	if ok := errors.As(err, &scimErr); ok {
+		mappedErr := mapToScimJsonError(ctx, scimErr.Parent)
+		mappedErr.ScimType = scimErr.ScimType
+		return mappedErr
+	}
+
 	zitadelErr := new(zerrors.ZitadelError)
 	if ok := errors.As(err, &zitadelErr); !ok {
-		return &scimError{
+		return &scimJsonError{
 			Schemas:    []string{schemas.IdError},
 			Detail:     err.Error(),
 			Status:     strconv.Itoa(http.StatusInternalServerError),
@@ -78,7 +101,7 @@ func mapToScimError(ctx context.Context, err error) *scimError {
 	}
 
 	localizedMsg := translator.LocalizeFromCtx(ctx, zitadelErr.GetMessage(), nil)
-	return &scimError{
+	return &scimJsonError{
 		Schemas:    []string{schemas.IdError, schemas.IdZitadelErrorDetail},
 		ScimType:   mapErrorToScimErrorType(err),
 		Detail:     localizedMsg,
