@@ -66,8 +66,8 @@ func NewUsersHandler(
 	return &UsersHandler{command, query, userCodeAlg, config}
 }
 
-func (h *UsersHandler) ResourceNamePlural() string {
-	return userResourceNamePlural
+func (h *UsersHandler) ResourceNamePlural() schemas.ScimResourceTypePlural {
+	return schemas.UsersResourceType
 }
 
 func (h *UsersHandler) NewResource() *ScimUser {

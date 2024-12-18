@@ -1,6 +1,8 @@
 package schemas
 
-type ScimSchemaType = string
+type ScimSchemaType string
+type ScimResourceTypeSingular string
+type ScimResourceTypePlural string
 
 const (
 	idPrefixMessages        = "urn:ietf:params:scim:api:messages:2.0:"
@@ -11,6 +13,9 @@ const (
 	IdListResponse       ScimSchemaType = idPrefixMessages + "ListResponse"
 	IdError              ScimSchemaType = idPrefixMessages + "Error"
 	IdZitadelErrorDetail ScimSchemaType = idPrefixZitadelMessages + "ErrorDetail"
+
+	UserResourceType  ScimResourceTypeSingular = "User"
+	UsersResourceType ScimResourceTypePlural   = "Users"
 
 	HandlerPrefix = "/scim/v2"
 )

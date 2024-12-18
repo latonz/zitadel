@@ -15,7 +15,7 @@ import (
 	"strconv"
 )
 
-type scimErrorType = string
+type scimErrorType string
 
 type wrappedScimError struct {
 	Parent   error
@@ -23,12 +23,12 @@ type wrappedScimError struct {
 }
 
 type scimError struct {
-	Schemas       []string      `json:"schemas"`
-	ScimType      scimErrorType `json:"scimType,omitempty"`
-	Detail        string        `json:"detail,omitempty"`
-	StatusCode    int           `json:"-"`
-	Status        string        `json:"status"`
-	ZitadelDetail *errorDetail  `json:"urn:ietf:params:scim:api:zitadel:messages:2.0:ErrorDetail,omitempty"`
+	Schemas       []schemas.ScimSchemaType `json:"schemas"`
+	ScimType      scimErrorType            `json:"scimType,omitempty"`
+	Detail        string                   `json:"detail,omitempty"`
+	StatusCode    int                      `json:"-"`
+	Status        string                   `json:"status"`
+	ZitadelDetail *errorDetail             `json:"urn:ietf:params:scim:api:zitadel:messages:2.0:ErrorDetail,omitempty"`
 }
 
 type errorDetail struct {
@@ -92,7 +92,7 @@ func mapToScimJsonError(ctx context.Context, err error) *scimError {
 	zitadelErr := new(zerrors.ZitadelError)
 	if ok := errors.As(err, &zitadelErr); !ok {
 		return &scimError{
-			Schemas:    []string{schemas.IdError},
+			Schemas:    []schemas.ScimSchemaType{schemas.IdError},
 			Detail:     err.Error(),
 			Status:     strconv.Itoa(http.StatusInternalServerError),
 			StatusCode: http.StatusInternalServerError,
@@ -106,7 +106,7 @@ func mapToScimJsonError(ctx context.Context, err error) *scimError {
 
 	localizedMsg := translator.LocalizeFromCtx(ctx, zitadelErr.GetMessage(), nil)
 	return &scimError{
-		Schemas:    []string{schemas.IdError, schemas.IdZitadelErrorDetail},
+		Schemas:    []schemas.ScimSchemaType{schemas.IdError, schemas.IdZitadelErrorDetail},
 		ScimType:   mapErrorToScimErrorType(err),
 		Detail:     localizedMsg,
 		StatusCode: statusCode,

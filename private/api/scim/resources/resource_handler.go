@@ -2,19 +2,16 @@ package resources
 
 import (
 	"context"
+	"fmt"
 	"github.com/zitadel/zitadel/internal/api/http"
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
 	"time"
 )
 
-const (
-	metadataKeyPrefix = "urn:zitadel:scim:"
-)
-
 type ResourceHandler[T ResourceHolder] interface {
-	ResourceNamePlural() string
-	NewResource() T
+	ResourceNamePlural() schemas.ScimResourceTypePlural
 	Schema() schemas.ScimSchemaType
+	NewResource() T
 
 	Create(ctx context.Context, resource T) (T, error)
 	Delete(ctx context.Context, id string) error
@@ -28,11 +25,11 @@ type Resource struct {
 }
 
 type ResourceMeta struct {
-	ResourceType string    `json:"resourceType"`
-	Created      time.Time `json:"created"`
-	LastModified time.Time `json:"lastModified"`
-	Version      string    `json:"version"`
-	Location     string    `json:"location"`
+	ResourceType schemas.ScimResourceTypeSingular `json:"resourceType"`
+	Created      time.Time                        `json:"created"`
+	LastModified time.Time                        `json:"lastModified"`
+	Version      string                           `json:"version"`
+	Location     string                           `json:"location"`
 }
 
 type ResourceHolder interface {
@@ -40,5 +37,5 @@ type ResourceHolder interface {
 }
 
 func buildLocation[T ResourceHolder](ctx context.Context, handler ResourceHandler[T], id string) string {
-	return http.DomainContext(ctx).Origin() + schemas.HandlerPrefix + "/" + handler.ResourceNamePlural() + "/" + id
+	return fmt.Sprintf("%s%s/%s/%s", http.DomainContext(ctx).Origin(), schemas.HandlerPrefix, handler.ResourceNamePlural(), id)
 }

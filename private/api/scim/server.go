@@ -46,7 +46,7 @@ func buildHandler(
 
 func mapResource[T resources.ResourceHolder](router *mux.Router, handler resources.ResourceHandler[T]) {
 	adapter := resources.NewResourceHandlerAdapter[T](handler)
-	resourceRouter := router.PathPrefix("/" + handler.ResourceNamePlural()).Subrouter()
+	resourceRouter := router.PathPrefix("/" + string(handler.ResourceNamePlural())).Subrouter()
 
 	resourceRouter.HandleFunc("", handleResourceCreatedResponse(adapter.Create)).Methods(http.MethodPost)
 	resourceRouter.HandleFunc("", handleJsonResponse(adapter.List)).Methods(http.MethodGet)

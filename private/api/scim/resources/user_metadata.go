@@ -7,20 +7,18 @@ import (
 	"github.com/zitadel/zitadel/internal/query"
 )
 
-type metadataKey = string
+type metadataKey string
 
 const (
-	userResourceNameSingular = "User"
-	userResourceNamePlural   = "Users"
-
+	metadataKeyPrefix                      = "urn:zitadel:scim:"
 	metadataKeyMiddleName      metadataKey = metadataKeyPrefix + "name.middleName"
-	metadataKeyHonorificPrefix             = metadataKeyPrefix + "name.honorificPrefix"
-	metadataKeyHonorificSuffix             = metadataKeyPrefix + "name.honorificSuffix"
-	metadataKeyExternalId                  = metadataKeyPrefix + "externalId"
-	metadataKeyProfileUrl                  = metadataKeyPrefix + "profileURL"
-	metadataKeyTitle                       = metadataKeyPrefix + "title"
-	metadataKeyLocale                      = metadataKeyPrefix + "locale"
-	metadataKeyTimezone                    = metadataKeyPrefix + "timezone"
+	metadataKeyHonorificPrefix metadataKey = metadataKeyPrefix + "name.honorificPrefix"
+	metadataKeyHonorificSuffix metadataKey = metadataKeyPrefix + "name.honorificSuffix"
+	metadataKeyExternalId      metadataKey = metadataKeyPrefix + "externalId"
+	metadataKeyProfileUrl      metadataKey = metadataKeyPrefix + "profileURL"
+	metadataKeyTitle           metadataKey = metadataKeyPrefix + "title"
+	metadataKeyLocale          metadataKey = metadataKeyPrefix + "locale"
+	metadataKeyTimezone        metadataKey = metadataKeyPrefix + "timezone"
 )
 
 var allRelevantMetadataKeys = []metadataKey{
@@ -42,15 +40,15 @@ func (h *UsersHandler) queryMetadataForUsers(ctx context.Context, userIds []stri
 		return nil, err
 	}
 
-	metadataMap := make(map[string]map[string][]byte, len(metadata.Metadata))
+	metadataMap := make(map[string]map[metadataKey][]byte, len(metadata.Metadata))
 	for _, entry := range metadata.Metadata {
 		userMetadata, ok := metadataMap[entry.UserID]
 		if !ok {
-			userMetadata = make(map[string][]byte)
+			userMetadata = make(map[metadataKey][]byte)
 			metadataMap[entry.UserID] = userMetadata
 		}
 
-		userMetadata[entry.Key] = entry.Value
+		userMetadata[metadataKey(entry.Key)] = entry.Value
 	}
 
 	return metadataMap, nil
@@ -64,9 +62,9 @@ func (h *UsersHandler) queryMetadataForUser(ctx context.Context, id string) (map
 		return nil, err
 	}
 
-	metadataMap := make(map[string][]byte, len(metadata.Metadata))
+	metadataMap := make(map[metadataKey][]byte, len(metadata.Metadata))
 	for _, entry := range metadata.Metadata {
-		metadataMap[entry.Key] = entry.Value
+		metadataMap[metadataKey(entry.Key)] = entry.Value
 	}
 
 	return metadataMap, nil
@@ -86,7 +84,7 @@ func (h *UsersHandler) buildMetadataQueries() *query.UserMetadataSearchQueries {
 }
 
 func buildMetadataKeyQuery(key metadataKey) query.SearchQuery {
-	q, err := query.NewUserMetadataKeySearchQuery(key, query.TextEquals)
+	q, err := query.NewUserMetadataKeySearchQuery(string(key), query.TextEquals)
 	if err != nil {
 		logging.Panic("Error build user metadata query for key " + key)
 	}
@@ -100,7 +98,7 @@ func (h *UsersHandler) mapMetadata(user *ScimUser) []*command.AddMetadataEntry {
 		value := getValueForMetadataKey(user, key)
 		if value != "" {
 			metadata = append(metadata, &command.AddMetadataEntry{
-				Key:   key,
+				Key:   string(key),
 				Value: []byte(value),
 			})
 		}

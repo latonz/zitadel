@@ -33,7 +33,7 @@ func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, err
 		}
 	}
 
-	// TODO why is the language not validated on the command layer
+	// TODO why is the language not validated on the command layer?
 	if err := domain.LanguageIsDefined(scimUser.PreferredLanguage); err != nil {
 		human.PreferredLanguage = language.English
 		scimUser.PreferredLanguage = language.English
@@ -148,7 +148,7 @@ func (h *UsersHandler) buildResourceForCommand(ctx context.Context, userDetails 
 	return &Resource{
 		Schemas: []schemas.ScimSchemaType{schemas.IdUser},
 		Meta: &ResourceMeta{
-			ResourceType: userResourceNameSingular,
+			ResourceType: schemas.UserResourceType,
 			Created:      created,
 			LastModified: userDetails.EventDate.UTC(),
 			Version:      strconv.FormatUint(userDetails.Sequence, 10),
@@ -161,7 +161,7 @@ func (h *UsersHandler) buildResourceForQuery(ctx context.Context, user *query.Us
 	return &Resource{
 		Schemas: []schemas.ScimSchemaType{schemas.IdUser},
 		Meta: &ResourceMeta{
-			ResourceType: userResourceNameSingular,
+			ResourceType: schemas.UserResourceType,
 			Created:      user.CreationDate.UTC(),
 			LastModified: user.ChangeDate.UTC(),
 			Version:      strconv.FormatUint(user.Sequence, 10),
