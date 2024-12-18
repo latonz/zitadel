@@ -60,19 +60,9 @@ func newListResponse[T any](response query.SearchResponse, q query.SearchRequest
 }
 
 func (adapter *ResourceHandlerAdapter[T]) Create(r *http.Request) (T, error) {
-	entity := adapter.handler.NewResource()
-	err := json.NewDecoder(r.Body).Decode(entity)
+	entity, err := adapter.readEntityFromBody(r)
 	if err != nil {
-		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgumentf(nil, "SCIM-ucrjson", "Could not deserialize json: %v", err.Error()))
-	}
-
-	resource := entity.GetResource()
-	if resource == nil {
-		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgument(nil, "SCIM-xxrjson", "Could not get resource"))
-	}
-
-	if !slices.Contains(resource.Schemas, adapter.handler.Schema()) {
-		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgumentf(nil, "SCIM-xxrschema", "Expected schema %v is not provided", adapter.handler.Schema()))
+		return entity, err
 	}
 
 	return adapter.handler.Create(r.Context(), entity)
@@ -124,4 +114,23 @@ func (adapter *ResourceHandlerAdapter[T]) Get(r *http.Request) (T, error) {
 func (adapter *ResourceHandlerAdapter[T]) Delete(r *http.Request) error {
 	id := mux.Vars(r)["id"]
 	return adapter.handler.Delete(r.Context(), id)
+}
+
+func (adapter *ResourceHandlerAdapter[T]) readEntityFromBody(r *http.Request) (T, error) {
+	entity := adapter.handler.NewResource()
+	err := json.NewDecoder(r.Body).Decode(entity)
+	if err != nil {
+		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgumentf(nil, "SCIM-ucrjson", "Could not deserialize json: %v", err.Error()))
+	}
+
+	resource := entity.GetResource()
+	if resource == nil {
+		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgument(nil, "SCIM-xxrjson", "Could not get resource"))
+	}
+
+	if !slices.Contains(resource.Schemas, adapter.handler.Schema()) {
+		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgumentf(nil, "SCIM-xxrschema", "Expected schema %v is not provided", adapter.handler.Schema()))
+	}
+
+	return entity, nil
 }
