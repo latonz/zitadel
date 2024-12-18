@@ -49,11 +49,11 @@ func NewResourceHandlerAdapter[T ResourceHolder](handler ResourceHandler[T]) *Re
 	}
 }
 
-func newListResponse[T any](response query.SearchResponse, q query.SearchRequest, resources []T) *ListResponse[T] {
+func newListResponse[T any](totalResultCount uint64, q query.SearchRequest, resources []T) *ListResponse[T] {
 	return &ListResponse[T]{
 		Schemas:      []schemas.ScimSchemaType{schemas.IdListResponse},
 		ItemsPerPage: q.Limit,
-		TotalResults: response.Count,
+		TotalResults: totalResultCount,
 		StartIndex:   q.Offset + 1, // start index is 1 based
 		Resources:    resources,
 	}

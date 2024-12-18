@@ -128,15 +128,19 @@ func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListRes
 		},
 	}
 
+	if request.Count == 0 {
+		count, err := h.query.CountUsers(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+
+		return newListResponse(count, q.SearchRequest, make([]*ScimUser, 0)), nil
+	}
+
 	// TODO permissionCheck?
 	users, err := h.query.SearchUsers(ctx, q, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	// TODO handle count 0 without loading rows
-	if request.Count == 0 {
-		users.Users = make([]*query.User, 0)
 	}
 
 	metadata, err := h.queryMetadataForUsers(ctx, userIDs(users.Users))
@@ -145,7 +149,7 @@ func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListRes
 	}
 
 	scimUsers := h.mapToScimUsers(ctx, users.Users, metadata)
-	return newListResponse(users.SearchResponse, q.SearchRequest, scimUsers), nil
+	return newListResponse(users.SearchResponse.Count, q.SearchRequest, scimUsers), nil
 }
 
 func (u *ScimUser) GetResource() *Resource {
