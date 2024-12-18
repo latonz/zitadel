@@ -60,6 +60,7 @@ func newListResponse[T any](response query.SearchResponse, q query.SearchRequest
 }
 
 func (adapter *ResourceHandlerAdapter[T]) Create(r *http.Request) (T, error) {
+	// TODO validate against schema
 	entity, err := adapter.readEntityFromBody(r)
 	if err != nil {
 		return entity, err
