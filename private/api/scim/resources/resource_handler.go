@@ -10,7 +10,7 @@ import (
 
 type ResourceHandler[T ResourceHolder] interface {
 	ResourceNamePlural() schemas.ScimResourceTypePlural
-	Schema() schemas.ScimSchemaType
+	SchemaType() schemas.ScimSchemaType
 	NewResource() T
 
 	Create(ctx context.Context, resource T) (T, error)

@@ -74,7 +74,7 @@ func (h *UsersHandler) NewResource() *ScimUser {
 	return &ScimUser{}
 }
 
-func (h *UsersHandler) Schema() schemas.ScimSchemaType {
+func (h *UsersHandler) SchemaType() schemas.ScimSchemaType {
 	return schemas.IdUser
 }
 

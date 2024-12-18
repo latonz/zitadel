@@ -128,8 +128,8 @@ func (adapter *ResourceHandlerAdapter[T]) readEntityFromBody(r *http.Request) (T
 		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgument(nil, "SCIM-xxrjson", "Could not get resource"))
 	}
 
-	if !slices.Contains(resource.Schemas, adapter.handler.Schema()) {
-		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgumentf(nil, "SCIM-xxrschema", "Expected schema %v is not provided", adapter.handler.Schema()))
+	if !slices.Contains(resource.Schemas, adapter.handler.SchemaType()) {
+		return entity, serrors.ThrowInvalidSyntax(zerrors.ThrowInvalidArgumentf(nil, "SCIM-xxrschema", "Expected schema %v is not provided", adapter.handler.SchemaType()))
 	}
 
 	return entity, nil
