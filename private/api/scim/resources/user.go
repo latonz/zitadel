@@ -125,7 +125,12 @@ func (h *UsersHandler) Create(ctx context.Context, user *ScimUser) (*ScimUser, e
 }
 
 func (h *UsersHandler) Delete(ctx context.Context, id string) error {
-	_, err := h.command.RemoveUserV2(ctx, id, nil)
+	memberships, grants, err := h.queryUserDependencies(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	_, err = h.command.RemoveUserV2(ctx, id, memberships, grants...)
 	return err
 }
 
@@ -166,6 +171,10 @@ func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListRes
 	return newListResponse(users.SearchResponse, q.SearchRequest, scimUsers), nil
 }
 
+func (u *ScimUser) GetResource() *Resource {
+	return u.Resource
+}
+
 func (h *UsersHandler) queryMetadata(ctx context.Context, id string) (map[metadataKey][]byte, error) {
 	keyQueries := make([]query.SearchQuery, len(allRelevantMetadataKeys))
 	for i, key := range allRelevantMetadataKeys {
@@ -199,6 +208,30 @@ func buildMetadataKeyQuery(key metadataKey) query.SearchQuery {
 	return q
 }
 
-func (u *ScimUser) GetResource() *Resource {
-	return u.Resource
+func (h *UsersHandler) queryUserDependencies(ctx context.Context, userID string) ([]*command.CascadingMembership, []string, error) {
+	userGrantUserQuery, err := query.NewUserGrantUserIDSearchQuery(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	grants, err := h.query.UserGrants(ctx, &query.UserGrantsQueries{
+		Queries: []query.SearchQuery{userGrantUserQuery},
+	}, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	membershipsUserQuery, err := query.NewMembershipUserIDQuery(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	memberships, err := h.query.Memberships(ctx, &query.MembershipSearchQuery{
+		Queries: []query.SearchQuery{membershipsUserQuery},
+	}, false)
+
+	if err != nil {
+		return nil, nil, err
+	}
+	return cascadingMemberships(memberships.Memberships), userGrantsToIDs(grants.UserGrants), nil
 }
