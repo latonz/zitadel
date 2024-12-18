@@ -25,6 +25,12 @@ func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, err
 	if scimUser.Name != nil {
 		human.FirstName = scimUser.Name.GivenName
 		human.LastName = scimUser.Name.FamilyName
+
+		// the direct mapping displayName => displayName has priority
+		// over the formatted name assignment
+		if human.DisplayName == "" {
+			human.DisplayName = scimUser.Name.Formatted
+		}
 	}
 
 	if err := domain.LanguageIsDefined(scimUser.PreferredLanguage); err != nil {
