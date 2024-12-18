@@ -109,7 +109,13 @@ func handleResourceResponse[T resources.ResourceHolder](next func(r *http.Reques
 }
 
 func handleEmptyResponse(next func(r *http.Request) error) func(http.ResponseWriter, *http.Request) {
-	return handleResourceResponse[resources.ResourceHolder](func(r *http.Request) (resources.ResourceHolder, error) {
-		return nil, next(r)
+	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
+		err := next(r)
+		if err != nil {
+			return err
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+		return nil
 	})
 }
