@@ -33,7 +33,9 @@ func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, err
 		}
 	}
 
+	// TODO why is the language not validated on the command layer
 	if err := domain.LanguageIsDefined(scimUser.PreferredLanguage); err != nil {
+		human.PreferredLanguage = language.English
 		scimUser.PreferredLanguage = language.English
 	} else if err := domain.LanguagesAreSupported(i18n.SupportedLanguages(), scimUser.PreferredLanguage); err != nil {
 		return nil, err
