@@ -12,6 +12,7 @@ import (
 	scim_config "github.com/zitadel/zitadel/private/api/scim/config"
 	"github.com/zitadel/zitadel/private/api/scim/middleware"
 	"github.com/zitadel/zitadel/private/api/scim/resources"
+	"github.com/zitadel/zitadel/private/api/scim/schemas"
 	"github.com/zitadel/zitadel/private/api/scim/serrors"
 	"net/http"
 )
@@ -23,7 +24,7 @@ func NewServer(
 	userCodeAlg crypto.EncryptionAlgorithm,
 	config *scim_config.Config,
 	middlewares ...func(next http.Handler) http.Handler) http.Handler {
-	verifier.RegisterServer("SCIM-V2", "scim/v2", AuthMapping)
+	verifier.RegisterServer("SCIM-V2", schemas.HandlerPrefix, AuthMapping)
 	return buildHandler(command, query, userCodeAlg, config, middlewares)
 }
 
@@ -47,7 +48,6 @@ func mapResource[T resources.ResourceHolder](router *mux.Router, handler resourc
 	adapter := resources.NewResourceHandlerAdapter[T](handler)
 	resourceRouter := router.PathPrefix("/" + handler.ResourceNamePlural()).Subrouter()
 
-	// TODO remove write only attributes
 	resourceRouter.HandleFunc("", handleResourceCreatedResponse(adapter.Create)).Methods(http.MethodPost)
 	resourceRouter.HandleFunc("", handleJsonResponse(adapter.List)).Methods(http.MethodGet)
 	resourceRouter.HandleFunc("/.search", handleJsonResponse(adapter.List)).Methods(http.MethodPost)

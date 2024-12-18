@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"github.com/gorilla/mux"
-	"net/http"
-	"strings"
-
 	"github.com/zitadel/zitadel/internal/api/authz"
 	http_util "github.com/zitadel/zitadel/internal/api/http"
 	"github.com/zitadel/zitadel/internal/telemetry/tracing"
+	"net/http"
+	"strings"
 )
 
 type AuthInterceptor struct {
@@ -84,10 +83,10 @@ func CheckAuthMethod(r *http.Request, verifier authz.APITokenVerifier) (authz.Op
 		return authOpt, false
 	}
 
-	if strings.Contains(r.RequestURI, "/scim/v2") {
-		return authz.Option{
-			Permission: "authenticated",
-		}, true
+	pathTemplate, _ := route.GetPathTemplate()
+	if pathTemplate == "" {
+		return authOpt, false
 	}
-	return authOpt, false
+
+	return verifier.CheckAuthMethod(r.Method + ":" + strings.TrimSuffix(r.RequestURI, r.URL.Path) + pathTemplate)
 }
