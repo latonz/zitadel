@@ -114,8 +114,12 @@ func (h *UsersHandler) ResourceNamePlural() schemas.ScimResourceTypePlural {
 	return schemas.UsersResourceType
 }
 
+func (u *ScimUser) GetResource() *Resource {
+	return u.Resource
+}
+
 func (h *UsersHandler) NewResource() *ScimUser {
-	return &ScimUser{}
+	return new(ScimUser)
 }
 
 func (h *UsersHandler) SchemaType() schemas.ScimSchemaType {
@@ -147,7 +151,6 @@ func (h *UsersHandler) Replace(ctx context.Context, id string, user *ScimUser) (
 }
 
 func (h *UsersHandler) Delete(ctx context.Context, id string) error {
-	// TODO if-match support
 	memberships, grants, err := h.queryUserDependencies(ctx, id)
 	if err != nil {
 		return err
@@ -173,9 +176,10 @@ func (h *UsersHandler) Get(ctx context.Context, id string) (*ScimUser, error) {
 func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListResponse[*ScimUser], error) {
 	q := &query.UserSearchQueries{
 		SearchRequest: query.SearchRequest{
-			Offset: request.StartIndex - 1, // start index is 1 based
-			Limit:  request.Count,
-			Asc:    true,
+			Offset:        request.StartIndex - 1, // start index is 1 based
+			Limit:         request.Count,
+			Asc:           false,
+			SortingColumn: query.UserIDCol,
 		},
 	}
 
@@ -188,6 +192,7 @@ func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListRes
 		return newListResponse(count, q.SearchRequest, make([]*ScimUser, 0)), nil
 	}
 
+	// TODO permission check?
 	users, err := h.query.SearchUsers(ctx, q, nil)
 	if err != nil {
 		return nil, err
@@ -200,10 +205,6 @@ func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListRes
 
 	scimUsers := h.mapToScimUsers(ctx, users.Users, metadata)
 	return newListResponse(users.SearchResponse.Count, q.SearchRequest, scimUsers), nil
-}
-
-func (u *ScimUser) GetResource() *Resource {
-	return u.Resource
 }
 
 func (h *UsersHandler) queryUserDependencies(ctx context.Context, userID string) ([]*command.CascadingMembership, []string, error) {

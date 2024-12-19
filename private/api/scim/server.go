@@ -43,11 +43,11 @@ func buildHandler(
 	router.Use(middleware.ContentTypeMiddleware)
 
 	scimMiddleware := zhttp_middlware.ChainedWithErrorHandler(serrors.ErrorHandler, middlewares...)
-	mapResource(router, resources.NewUsersHandler(command, query, userCodeAlg, cfg), scimMiddleware)
+	mapResource(router, scimMiddleware, resources.NewUsersHandler(command, query, userCodeAlg, cfg))
 	return router
 }
 
-func mapResource[T resources.ResourceHolder](router *mux.Router, handler resources.ResourceHandler[T], mw zhttp_middlware.ErrorHandlerFunc) {
+func mapResource[T resources.ResourceHolder](router *mux.Router, mw zhttp_middlware.ErrorHandlerFunc, handler resources.ResourceHandler[T]) {
 	adapter := resources.NewResourceHandlerAdapter[T](handler)
 	resourceRouter := router.PathPrefix("/" + string(handler.ResourceNamePlural())).Subrouter()
 
