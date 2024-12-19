@@ -53,6 +53,7 @@ func mapResource[T resources.ResourceHolder](router *mux.Router, handler resourc
 	resourceRouter.HandleFunc("", handleJsonResponse(adapter.List)).Methods(http.MethodGet)
 	resourceRouter.HandleFunc("/.search", handleJsonResponse(adapter.List)).Methods(http.MethodPost)
 	resourceRouter.HandleFunc("/{id}", handleResourceResponse(adapter.Get)).Methods(http.MethodGet)
+	resourceRouter.HandleFunc("/{id}", handleResourceResponse(adapter.Replace)).Methods(http.MethodPut)
 	resourceRouter.HandleFunc("/{id}", handleEmptyResponse(adapter.Delete)).Methods(http.MethodDelete)
 }
 

@@ -57,8 +57,10 @@ type ScimRole struct {
 }
 
 type ScimPhoto struct {
-	Value schemas.HttpURL `json:"value"`
-	Type  string          `json:"type"`
+	Value   schemas.HttpURL `json:"value"`
+	Display string          `json:"display,omitempty"`
+	Type    string          `json:"type"`
+	Primary bool            `json:"primary,omitempty"`
 }
 
 type ScimAddress struct {
@@ -137,7 +139,15 @@ func (h *UsersHandler) Create(ctx context.Context, user *ScimUser) (*ScimUser, e
 	return user, err
 }
 
+func (h *UsersHandler) Replace(ctx context.Context, id string, user *ScimUser) (*ScimUser, error) {
+	// h.command.ChangeUserHuman()
+
+	// TODO implement
+	return nil, nil
+}
+
 func (h *UsersHandler) Delete(ctx context.Context, id string) error {
+	// TODO if-match support
 	memberships, grants, err := h.queryUserDependencies(ctx, id)
 	if err != nil {
 		return err
