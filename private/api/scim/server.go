@@ -39,6 +39,7 @@ func buildHandler(
 		router.Use(m)
 	}
 
+	// TODO org in path
 	router.Use(middleware.ContentTypeMiddleware)
 	mapResource(router, resources.NewUsersHandler(command, query, userCodeAlg, cfg))
 	return router

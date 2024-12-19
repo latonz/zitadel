@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/query"
@@ -19,6 +20,11 @@ const (
 	metadataKeyTitle           metadataKey = metadataKeyPrefix + "title"
 	metadataKeyLocale          metadataKey = metadataKeyPrefix + "locale"
 	metadataKeyTimezone        metadataKey = metadataKeyPrefix + "timezone"
+	metadataKeyIms             metadataKey = metadataKeyPrefix + "ims"
+	metadataKeyPhotos          metadataKey = metadataKeyPrefix + "photos"
+	metadataKeyAddresses       metadataKey = metadataKeyPrefix + "addresses"
+	metadataKeyEntitlements    metadataKey = metadataKeyPrefix + "entitlements"
+	metadataKeyRoles           metadataKey = metadataKeyPrefix + "roles"
 )
 
 var allRelevantMetadataKeys = []metadataKey{
@@ -30,6 +36,11 @@ var allRelevantMetadataKeys = []metadataKey{
 	metadataKeyTitle,
 	metadataKeyLocale,
 	metadataKeyTimezone,
+	metadataKeyIms,
+	metadataKeyPhotos,
+	metadataKeyAddresses,
+	metadataKeyEntitlements,
+	metadataKeyRoles,
 }
 
 func (h *UsersHandler) queryMetadataForUsers(ctx context.Context, userIds []string) (map[string]map[metadataKey][]byte, error) {
@@ -92,14 +103,19 @@ func buildMetadataKeyQuery(key metadataKey) query.SearchQuery {
 	return q
 }
 
-func (h *UsersHandler) mapMetadata(user *ScimUser) []*command.AddMetadataEntry {
+func (h *UsersHandler) mapMetadataToCommands(user *ScimUser) []*command.AddMetadataEntry {
 	metadata := make([]*command.AddMetadataEntry, 0, len(allRelevantMetadataKeys))
 	for _, key := range allRelevantMetadataKeys {
-		value := getValueForMetadataKey(user, key)
-		if value != "" {
+		value, err := getValueForMetadataKey(user, key)
+		if err != nil {
+			logging.OnError(err).Warn("Failed to serialize scim metadata")
+			continue
+		}
+
+		if len(value) > 0 {
 			metadata = append(metadata, &command.AddMetadataEntry{
 				Key:   string(key),
-				Value: []byte(value),
+				Value: value,
 			})
 		}
 	}
@@ -107,8 +123,44 @@ func (h *UsersHandler) mapMetadata(user *ScimUser) []*command.AddMetadataEntry {
 	return metadata
 }
 
-func getValueForMetadataKey(user *ScimUser, key metadataKey) string {
+func getValueForMetadataKey(user *ScimUser, key metadataKey) ([]byte, error) {
+	value := getRawValueForMetadataKey(user, key)
+	if value == nil {
+		return nil, nil
+	}
+
 	switch key {
+	case metadataKeyEntitlements:
+		fallthrough
+	case metadataKeyIms:
+		fallthrough
+	case metadataKeyPhotos:
+		fallthrough
+	case metadataKeyAddresses:
+		fallthrough
+	case metadataKeyRoles:
+		return json.Marshal(value)
+	default:
+		valueStr := value.(string)
+		if valueStr == "" {
+			return nil, nil
+		}
+		return []byte(valueStr), nil
+	}
+}
+
+func getRawValueForMetadataKey(user *ScimUser, key metadataKey) interface{} {
+	switch key {
+	case metadataKeyIms:
+		return user.Ims
+	case metadataKeyPhotos:
+		return user.Photos
+	case metadataKeyAddresses:
+		return user.Addresses
+	case metadataKeyEntitlements:
+		return user.Entitlements
+	case metadataKeyRoles:
+		return user.Roles
 	case metadataKeyMiddleName:
 		if user.Name == nil {
 			return ""
@@ -134,16 +186,25 @@ func getValueForMetadataKey(user *ScimUser, key metadataKey) string {
 		return user.Locale
 	case metadataKeyTimezone:
 		return user.Timezone
+	default:
+		panic("unknown metadata key" + key)
 	}
-
-	return ""
 }
 
-func extractMetadata(metadata map[metadataKey][]byte, key metadataKey) string {
+func extractScalarMetadata(metadata map[metadataKey][]byte, key metadataKey) string {
 	val, ok := metadata[key]
 	if !ok {
 		return ""
 	}
 
 	return string(val)
+}
+
+func extractJsonMetadata(metadata map[metadataKey][]byte, key metadataKey, v interface{}) error {
+	val, ok := metadata[key]
+	if !ok {
+		return nil
+	}
+
+	return json.Unmarshal(val, v)
 }

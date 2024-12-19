@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/domain"
 	"github.com/zitadel/zitadel/internal/i18n"
@@ -19,7 +20,7 @@ func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, err
 		Password:    scimUser.Password,
 		Email:       h.mapPrimaryEmail(scimUser),
 		Phone:       h.mapPrimaryPhone(scimUser),
-		Metadata:    h.mapMetadata(scimUser),
+		Metadata:    h.mapMetadataToCommands(scimUser),
 	}
 
 	if scimUser.Name != nil {
@@ -90,20 +91,46 @@ func (h *UsersHandler) mapToScimUsers(ctx context.Context, users []*query.User, 
 
 func (h *UsersHandler) mapToScimUser(ctx context.Context, user *query.User, metadata map[metadataKey][]byte) *ScimUser {
 	scimUser := &ScimUser{
-		Resource:   h.buildResourceForQuery(ctx, user),
-		ID:         user.ID,
-		ExternalID: extractMetadata(metadata, metadataKeyExternalId),
-		UserName:   user.Username,
-		ProfileUrl: extractMetadata(metadata, metadataKeyProfileUrl),
-		Title:      extractMetadata(metadata, metadataKeyTitle),
-		Locale:     extractMetadata(metadata, metadataKeyLocale),
-		Timezone:   extractMetadata(metadata, metadataKeyTimezone),
-		Active:     user.State.IsEnabled(),
+		Resource:     h.buildResourceForQuery(ctx, user),
+		ID:           user.ID,
+		ExternalID:   extractScalarMetadata(metadata, metadataKeyExternalId),
+		UserName:     user.Username,
+		ProfileUrl:   extractScalarMetadata(metadata, metadataKeyProfileUrl),
+		Title:        extractScalarMetadata(metadata, metadataKeyTitle),
+		Locale:       extractScalarMetadata(metadata, metadataKeyLocale),
+		Timezone:     extractScalarMetadata(metadata, metadataKeyTimezone),
+		Active:       user.State.IsEnabled(),
+		Ims:          make([]*ScimIms, 0),
+		Addresses:    make([]*ScimAddress, 0),
+		Photos:       make([]*ScimPhoto, 0),
+		Entitlements: make([]*ScimEntitlement, 0),
+		Roles:        make([]*ScimRole, 0),
+	}
+
+	if err := extractJsonMetadata(metadata, metadataKeyIms, &scimUser.Ims); err != nil {
+		logging.OnError(err).Warn("Could not deserialize scim ims metadata")
+	}
+
+	if err := extractJsonMetadata(metadata, metadataKeyAddresses, &scimUser.Addresses); err != nil {
+		logging.OnError(err).Warn("Could not deserialize scim addresses metadata")
+	}
+
+	if err := extractJsonMetadata(metadata, metadataKeyPhotos, &scimUser.Photos); err != nil {
+		logging.OnError(err).Warn("Could not deserialize scim photos metadata")
+	}
+
+	if err := extractJsonMetadata(metadata, metadataKeyEntitlements, &scimUser.Entitlements); err != nil {
+		logging.OnError(err).Warn("Could not deserialize scim entitlements metadata")
+	}
+
+	if err := extractJsonMetadata(metadata, metadataKeyRoles, &scimUser.Roles); err != nil {
+		logging.OnError(err).Warn("Could not deserialize scim roles metadata")
 	}
 
 	if user.Human != nil {
 		mapHumanToScimUser(user.Human, scimUser, metadata)
 	}
+
 	return scimUser
 }
 
@@ -115,9 +142,9 @@ func mapHumanToScimUser(human *query.Human, user *ScimUser, metadata map[metadat
 		Formatted:       human.DisplayName,
 		FamilyName:      human.LastName,
 		GivenName:       human.FirstName,
-		MiddleName:      extractMetadata(metadata, metadataKeyMiddleName),
-		HonorificPrefix: extractMetadata(metadata, metadataKeyHonorificPrefix),
-		HonorificSuffix: extractMetadata(metadata, metadataKeyHonorificSuffix),
+		MiddleName:      extractScalarMetadata(metadata, metadataKeyMiddleName),
+		HonorificPrefix: extractScalarMetadata(metadata, metadataKeyHonorificPrefix),
+		HonorificSuffix: extractScalarMetadata(metadata, metadataKeyHonorificSuffix),
 	}
 
 	if string(human.Email) != "" {
@@ -151,7 +178,7 @@ func (h *UsersHandler) buildResourceForCommand(ctx context.Context, userDetails 
 			ResourceType: schemas.UserResourceType,
 			Created:      created,
 			LastModified: userDetails.EventDate.UTC(),
-			Version:      strconv.FormatUint(userDetails.Sequence, 10),
+			Version:      strconv.FormatUint(userDetails.Sequence, 10), // TODO include metadata version
 			Location:     buildLocation(ctx, h, userDetails.ID),
 		},
 	}

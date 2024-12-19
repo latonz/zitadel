@@ -117,6 +117,7 @@ func (adapter *ResourceHandlerAdapter[T]) Delete(r *http.Request) error {
 }
 
 func (adapter *ResourceHandlerAdapter[T]) readEntityFromBody(r *http.Request) (T, error) {
+	// TODO validate schema
 	entity := adapter.handler.NewResource()
 	err := json.NewDecoder(r.Body).Decode(entity)
 	if err != nil {

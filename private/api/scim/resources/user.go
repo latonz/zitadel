@@ -26,7 +26,7 @@ type ScimUser struct {
 	Name              *ScimUserName      `json:"name,omitempty"`
 	DisplayName       string             `json:"displayName,omitempty"`
 	NickName          string             `json:"nickName,omitempty"`
-	ProfileUrl        string             `json:"profileUrl,omitempty"`
+	ProfileUrl        string             `json:"profileUrl,omitempty"` // TODO validate url
 	Title             string             `json:"title,omitempty"`
 	PreferredLanguage language.Tag       `json:"preferredLanguage,omitempty"`
 	Locale            string             `json:"locale,omitempty"`
@@ -35,8 +35,46 @@ type ScimUser struct {
 	Emails            []*ScimEmail       `json:"emails,omitempty"`
 	PhoneNumbers      []*ScimPhoneNumber `json:"phoneNumbers,omitempty"`
 	Password          string             `json:"password,omitempty"`
+	Ims               []*ScimIms         `json:"ims,omitempty"`
+	Addresses         []*ScimAddress     `json:"addresses,omitempty"`
+	Photos            []*ScimPhoto       `json:"photos,omitempty"`
+	Entitlements      []*ScimEntitlement `json:"entitlements,omitempty"`
+	Roles             []*ScimRole        `json:"roles,omitempty"`
+}
 
-	// TODO add ims and later attributes, but how should these be serialized?
+type ScimEntitlement struct {
+	Value   string `json:"value,omitempty"`
+	Display string `json:"display,omitempty"`
+	Type    string `json:"type,omitempty"`
+	Primary bool   `json:"primary,omitempty"`
+}
+
+type ScimRole struct {
+	Value   string `json:"value,omitempty"`
+	Display string `json:"display,omitempty"`
+	Type    string `json:"type,omitempty"`
+	Primary bool   `json:"primary,omitempty"`
+}
+
+type ScimPhoto struct {
+	Value string `json:"value"` // TODO validate valid url
+	Type  string `json:"type"`
+}
+
+type ScimAddress struct {
+	Type          string `json:"type,omitempty"`
+	StreetAddress string `json:"streetAddress,omitempty"`
+	Locality      string `json:"locality,omitempty"`
+	Region        string `json:"region,omitempty"`
+	PostalCode    string `json:"postalCode,omitempty"`
+	Country       string `json:"country,omitempty"`
+	Formatted     string `json:"formatted,omitempty"`
+	Primary       bool   `json:"primary,omitempty"`
+}
+
+type ScimIms struct {
+	Value string `json:"value"`
+	Type  string `json:"type"`
 }
 
 type ScimEmail struct {
