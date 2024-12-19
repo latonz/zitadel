@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/zitadel/logging"
 	http_util "github.com/zitadel/zitadel/internal/api/http"
+	zhttp_middleware "github.com/zitadel/zitadel/internal/api/http/middleware"
 	"github.com/zitadel/zitadel/internal/i18n"
 	"github.com/zitadel/zitadel/internal/zerrors"
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
@@ -50,20 +51,22 @@ const (
 
 var translator *i18n.Translator
 
-func ErrorHandlerMiddleware(next func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+func ErrorHandler(next zhttp_middleware.HandlerFuncWithError) http.Handler {
 	var err error
 	translator, err = i18n.NewZitadelTranslator(language.English)
 	logging.OnError(err).Panic("unable to get translator")
 
-	return func(w http.ResponseWriter, r *http.Request) {
-		if err := next(w, r); err != nil {
-			scimErr := mapToScimJsonError(r.Context(), err)
-			w.WriteHeader(scimErr.StatusCode)
-
-			jsonErr := json.NewEncoder(w).Encode(scimErr)
-			logging.OnError(jsonErr).Warn("Failed to marshal scim error response")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err = next(w, r); err == nil {
+			return
 		}
-	}
+
+		scimErr := mapToScimJsonError(r.Context(), err)
+		w.WriteHeader(scimErr.StatusCode)
+
+		jsonErr := json.NewEncoder(w).Encode(scimErr)
+		logging.OnError(jsonErr).Warn("Failed to marshal scim error response")
+	})
 }
 
 func ThrowInvalidSyntax(parent error) error {

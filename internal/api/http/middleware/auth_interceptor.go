@@ -24,24 +24,17 @@ func AuthorizationInterceptor(verifier authz.APITokenVerifier, authConfig authz.
 }
 
 func (a *AuthInterceptor) Handler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, err := authorize(r, a.verifier, a.authConfig)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-		r = r.WithContext(ctx)
-		next.ServeHTTP(w, r)
-	})
+	return a.HandlerFunc(next)
 }
 
-func (a *AuthInterceptor) HandlerFunc(next http.HandlerFunc) http.HandlerFunc {
+func (a *AuthInterceptor) HandlerFunc(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, err := authorize(r, a.verifier, a.authConfig)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
+
 		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r)
 	}
@@ -64,7 +57,7 @@ type httpReq struct{}
 func authorize(r *http.Request, verifier authz.APITokenVerifier, authConfig authz.Config) (_ context.Context, err error) {
 	ctx := r.Context()
 
-	authOpt, needsToken := CheckAuthMethod(r, verifier)
+	authOpt, needsToken := checkAuthMethod(r, verifier)
 	if !needsToken {
 		return ctx, nil
 	}
@@ -84,7 +77,7 @@ func authorize(r *http.Request, verifier authz.APITokenVerifier, authConfig auth
 	return ctxSetter(ctx), nil
 }
 
-func CheckAuthMethod(r *http.Request, verifier authz.APITokenVerifier) (authz.Option, bool) {
+func checkAuthMethod(r *http.Request, verifier authz.APITokenVerifier) (authz.Option, bool) {
 	authOpt, needsToken := verifier.CheckAuthMethod(r.Method + ":" + r.RequestURI)
 	if needsToken {
 		return authOpt, true
@@ -100,5 +93,13 @@ func CheckAuthMethod(r *http.Request, verifier authz.APITokenVerifier) (authz.Op
 		return authOpt, false
 	}
 
-	return verifier.CheckAuthMethod(r.Method + ":" + strings.TrimSuffix(r.RequestURI, r.URL.Path) + pathTemplate)
+	// the path prefix is usually handled in a router in upper layer
+	// trim the query and the path of the url to get the correct path prefix
+	pathPrefix := r.RequestURI
+	if i := strings.Index(pathPrefix, "?"); i != -1 {
+		pathPrefix = pathPrefix[0:i]
+	}
+	pathPrefix = strings.TrimSuffix(pathPrefix, r.URL.Path)
+
+	return verifier.CheckAuthMethod(r.Method + ":" + pathPrefix + pathTemplate)
 }

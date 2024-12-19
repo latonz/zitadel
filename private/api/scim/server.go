@@ -24,10 +24,9 @@ func NewServer(
 	verifier *authz.ApiTokenVerifier,
 	userCodeAlg crypto.EncryptionAlgorithm,
 	config *scim_config.Config,
-	authMiddleware *zhttp_middlware.AuthInterceptor,
-	middlewares ...func(next http.Handler) http.Handler) http.Handler {
+	middlewares ...zhttp_middlware.MiddlewareWithErrorFunc) http.Handler {
 	verifier.RegisterServer("SCIM-V2", schemas.HandlerPrefix, AuthMapping)
-	return buildHandler(command, query, userCodeAlg, config, authMiddleware, middlewares)
+	return buildHandler(command, query, userCodeAlg, config, middlewares...)
 }
 
 func buildHandler(
@@ -35,25 +34,20 @@ func buildHandler(
 	query *query.Queries,
 	userCodeAlg crypto.EncryptionAlgorithm,
 	cfg *scim_config.Config,
-	authMiddleware *zhttp_middlware.AuthInterceptor,
-	middlewares []func(next http.Handler) http.Handler) http.Handler {
-	router := mux.NewRouter()
-	for _, m := range middlewares {
-		router.Use(m)
-	}
+	middlewares ...zhttp_middlware.MiddlewareWithErrorFunc) http.Handler {
 
+	router := mux.NewRouter()
+
+	// handle non-error related middleware
 	// TODO org in path
 	router.Use(middleware.ContentTypeMiddleware)
 
-	scimMiddleware := func(next zhttp_middlware.HandlerFuncWithError) http.Handler {
-		return serrors.ErrorHandlerMiddleware(authMiddleware.HandlerFuncWithError(next))
-	}
-
+	scimMiddleware := zhttp_middlware.ChainedWithErrorHandler(serrors.ErrorHandler, middlewares...)
 	mapResource(router, resources.NewUsersHandler(command, query, userCodeAlg, cfg), scimMiddleware)
 	return router
 }
 
-func mapResource[T resources.ResourceHolder](router *mux.Router, handler resources.ResourceHandler[T], mw func(next zhttp_middlware.HandlerFuncWithError) http.Handler) {
+func mapResource[T resources.ResourceHolder](router *mux.Router, handler resources.ResourceHandler[T], mw zhttp_middlware.ErrorHandlerFunc) {
 	adapter := resources.NewResourceHandlerAdapter[T](handler)
 	resourceRouter := router.PathPrefix("/" + string(handler.ResourceNamePlural())).Subrouter()
 
@@ -87,7 +81,6 @@ func handleResourceCreatedResponse[T resources.ResourceHolder](next func(*http.R
 
 		resource := entity.GetResource()
 		w.Header().Set(api_http.Location, resource.Meta.Location)
-		w.Header().Set(api_http.Etag, resource.Meta.Version) // TODO rm?
 		w.WriteHeader(http.StatusCreated)
 
 		err = json.NewEncoder(w).Encode(entity)
@@ -104,13 +97,7 @@ func handleResourceResponse[T resources.ResourceHolder](next func(*http.Request)
 		}
 
 		resource := entity.GetResource()
-		if r.Header.Get(api_http.IfNoneMatch) == resource.Meta.Version {
-			w.WriteHeader(http.StatusNotModified)
-			return nil
-		}
-
 		w.Header().Set(api_http.ContentLocation, resource.Meta.Location)
-		w.Header().Set(api_http.Etag, resource.Meta.Version)
 
 		err = json.NewEncoder(w).Encode(entity)
 		logging.OnError(err).Warn("scim json response encoding failed")
