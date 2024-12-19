@@ -221,7 +221,7 @@ func userGrantsToIDs(userGrants []*query.UserGrant) []string {
 	return converted
 }
 
-func userIDs(users []*query.User) []string {
+func usersToIDs(users []*query.User) []string {
 	ids := make([]string, len(users))
 	for i, user := range users {
 		ids[i] = user.ID

@@ -21,7 +21,7 @@ type UsersHandler struct {
 type ScimUser struct {
 	*Resource
 	ID                string             `json:"id"`
-	ExternalID        string             `json:"externalId,omitempty"`
+	ExternalID        string             `json:"externalId,omitempty"` // TODO scope to provisioning domain
 	UserName          string             `json:"userName,omitempty"`
 	Name              *ScimUserName      `json:"name,omitempty"`
 	DisplayName       string             `json:"displayName,omitempty"`
@@ -36,7 +36,7 @@ type ScimUser struct {
 	PhoneNumbers      []*ScimPhoneNumber `json:"phoneNumbers,omitempty"`
 	Password          string             `json:"password,omitempty"`
 
-	// TODO add ims and later attributes
+	// TODO add ims and later attributes, but how should these be serialized?
 }
 
 type ScimEmail struct {
@@ -142,7 +142,7 @@ func (h *UsersHandler) List(ctx context.Context, request *ListRequest) (*ListRes
 		return nil, err
 	}
 
-	metadata, err := h.queryMetadataForUsers(ctx, userIDs(users.Users))
+	metadata, err := h.queryMetadataForUsers(ctx, usersToIDs(users.Users))
 	if err != nil {
 		return nil, err
 	}
