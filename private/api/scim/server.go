@@ -64,7 +64,7 @@ func handleJsonResponse[T any](next func(r *http.Request) (T, error)) func(w htt
 		}
 
 		err = json.NewEncoder(w).Encode(entity)
-		logging.OnError(err).Warn("scim error encoding failed")
+		logging.OnError(err).Warn("scim json response encoding failed")
 		return nil
 	})
 }
@@ -82,7 +82,7 @@ func handleResourceCreatedResponse[T resources.ResourceHolder](next func(r *http
 		w.WriteHeader(http.StatusCreated)
 
 		err = json.NewEncoder(w).Encode(entity)
-		logging.OnError(err).Warn("scim error encoding failed")
+		logging.OnError(err).Warn("scim json response encoding failed")
 		return nil
 	})
 }
@@ -104,7 +104,7 @@ func handleResourceResponse[T resources.ResourceHolder](next func(r *http.Reques
 		w.Header().Set(api_http.Etag, resource.Meta.Version)
 
 		err = json.NewEncoder(w).Encode(entity)
-		logging.OnError(err).Warn("scim error encoding failed")
+		logging.OnError(err).Warn("scim json response encoding failed")
 		return nil
 	})
 }

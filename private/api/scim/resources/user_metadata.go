@@ -6,6 +6,7 @@ import (
 	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/query"
+	"github.com/zitadel/zitadel/private/api/scim/schemas"
 )
 
 type metadataKey string
@@ -140,6 +141,8 @@ func getValueForMetadataKey(user *ScimUser, key metadataKey) ([]byte, error) {
 		fallthrough
 	case metadataKeyRoles:
 		return json.Marshal(value)
+	case metadataKeyProfileUrl:
+		return []byte(value.(*schemas.HttpURL).String()), nil
 	default:
 		valueStr := value.(string)
 		if valueStr == "" {
@@ -198,6 +201,21 @@ func extractScalarMetadata(metadata map[metadataKey][]byte, key metadataKey) str
 	}
 
 	return string(val)
+}
+
+func extractHttpURLMetadata(metadata map[metadataKey][]byte, key metadataKey) *schemas.HttpURL {
+	val, ok := metadata[key]
+	if !ok {
+		return nil
+	}
+
+	url, err := schemas.ParseHTTPURL(string(val))
+	if err != nil {
+		logging.OnError(err).Warn("Failed to parse scim url metadata for " + key)
+		return nil
+	}
+
+	return url
 }
 
 func extractJsonMetadata(metadata map[metadataKey][]byte, key metadataKey, v interface{}) error {

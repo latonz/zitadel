@@ -20,26 +20,26 @@ type UsersHandler struct {
 
 type ScimUser struct {
 	*Resource
-	ID                string             `json:"id"`
-	ExternalID        string             `json:"externalId,omitempty"` // TODO scope to provisioning domain
-	UserName          string             `json:"userName,omitempty"`
-	Name              *ScimUserName      `json:"name,omitempty"`
-	DisplayName       string             `json:"displayName,omitempty"`
-	NickName          string             `json:"nickName,omitempty"`
-	ProfileUrl        string             `json:"profileUrl,omitempty"` // TODO validate url
-	Title             string             `json:"title,omitempty"`
-	PreferredLanguage language.Tag       `json:"preferredLanguage,omitempty"`
-	Locale            string             `json:"locale,omitempty"`
-	Timezone          string             `json:"timezone,omitempty"`
-	Active            bool               `json:"active,omitempty"`
-	Emails            []*ScimEmail       `json:"emails,omitempty"`
-	PhoneNumbers      []*ScimPhoneNumber `json:"phoneNumbers,omitempty"`
-	Password          string             `json:"password,omitempty"`
-	Ims               []*ScimIms         `json:"ims,omitempty"`
-	Addresses         []*ScimAddress     `json:"addresses,omitempty"`
-	Photos            []*ScimPhoto       `json:"photos,omitempty"`
-	Entitlements      []*ScimEntitlement `json:"entitlements,omitempty"`
-	Roles             []*ScimRole        `json:"roles,omitempty"`
+	ID                string                   `json:"id"`
+	ExternalID        string                   `json:"externalId,omitempty"` // TODO scope to provisioning domain
+	UserName          string                   `json:"userName,omitempty"`
+	Name              *ScimUserName            `json:"name,omitempty"`
+	DisplayName       string                   `json:"displayName,omitempty"`
+	NickName          string                   `json:"nickName,omitempty"`
+	ProfileUrl        *schemas.HttpURL         `json:"profileUrl,omitempty"`
+	Title             string                   `json:"title,omitempty"`
+	PreferredLanguage language.Tag             `json:"preferredLanguage,omitempty"`
+	Locale            string                   `json:"locale,omitempty"`
+	Timezone          string                   `json:"timezone,omitempty"`
+	Active            bool                     `json:"active,omitempty"`
+	Emails            []*ScimEmail             `json:"emails,omitempty"`
+	PhoneNumbers      []*ScimPhoneNumber       `json:"phoneNumbers,omitempty"`
+	Password          *schemas.WriteOnlyString `json:"password,omitempty"`
+	Ims               []*ScimIms               `json:"ims,omitempty"`
+	Addresses         []*ScimAddress           `json:"addresses,omitempty"`
+	Photos            []*ScimPhoto             `json:"photos,omitempty"`
+	Entitlements      []*ScimEntitlement       `json:"entitlements,omitempty"`
+	Roles             []*ScimRole              `json:"roles,omitempty"`
 }
 
 type ScimEntitlement struct {
@@ -57,8 +57,8 @@ type ScimRole struct {
 }
 
 type ScimPhoto struct {
-	Value string `json:"value"` // TODO validate valid url
-	Type  string `json:"type"`
+	Value schemas.HttpURL `json:"value"`
+	Type  string          `json:"type"`
 }
 
 type ScimAddress struct {
@@ -104,6 +104,10 @@ func NewUsersHandler(
 	return &UsersHandler{command, query, userCodeAlg, config}
 }
 
+func (h *UsersHandler) ResourceNameSingular() schemas.ScimResourceTypeSingular {
+	return schemas.UserResourceType
+}
+
 func (h *UsersHandler) ResourceNamePlural() schemas.ScimResourceTypePlural {
 	return schemas.UsersResourceType
 }
@@ -129,8 +133,7 @@ func (h *UsersHandler) Create(ctx context.Context, user *ScimUser) (*ScimUser, e
 	}
 
 	user.ID = addHuman.Details.ID
-	user.Resource = h.buildResourceForCommand(ctx, addHuman.Details)
-	user.Password = ""
+	user.Resource = buildResource(ctx, h, addHuman.Details)
 	return user, err
 }
 

@@ -17,10 +17,14 @@ func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, err
 		Username:    scimUser.UserName,
 		NickName:    scimUser.NickName,
 		DisplayName: scimUser.DisplayName,
-		Password:    scimUser.Password,
 		Email:       h.mapPrimaryEmail(scimUser),
 		Phone:       h.mapPrimaryPhone(scimUser),
 		Metadata:    h.mapMetadataToCommands(scimUser),
+	}
+
+	if scimUser.Password != nil {
+		human.Password = string(*scimUser.Password)
+		scimUser.Password = nil
 	}
 
 	if scimUser.Name != nil {
@@ -95,7 +99,7 @@ func (h *UsersHandler) mapToScimUser(ctx context.Context, user *query.User, meta
 		ID:           user.ID,
 		ExternalID:   extractScalarMetadata(metadata, metadataKeyExternalId),
 		UserName:     user.Username,
-		ProfileUrl:   extractScalarMetadata(metadata, metadataKeyProfileUrl),
+		ProfileUrl:   extractHttpURLMetadata(metadata, metadataKeyProfileUrl),
 		Title:        extractScalarMetadata(metadata, metadataKeyTitle),
 		Locale:       extractScalarMetadata(metadata, metadataKeyLocale),
 		Timezone:     extractScalarMetadata(metadata, metadataKeyTimezone),
@@ -163,24 +167,6 @@ func mapHumanToScimUser(human *query.Human, user *ScimUser, metadata map[metadat
 				Primary: true,
 			},
 		}
-	}
-}
-
-func (h *UsersHandler) buildResourceForCommand(ctx context.Context, userDetails *domain.ObjectDetails) *Resource {
-	created := userDetails.CreationDate.UTC()
-	if created.IsZero() {
-		created = userDetails.EventDate.UTC()
-	}
-
-	return &Resource{
-		Schemas: []schemas.ScimSchemaType{schemas.IdUser},
-		Meta: &ResourceMeta{
-			ResourceType: schemas.UserResourceType,
-			Created:      created,
-			LastModified: userDetails.EventDate.UTC(),
-			Version:      strconv.FormatUint(userDetails.Sequence, 10), // TODO include metadata version
-			Location:     buildLocation(ctx, h, userDetails.ID),
-		},
 	}
 }
 
