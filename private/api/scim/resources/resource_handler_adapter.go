@@ -3,7 +3,7 @@ package resources
 import (
 	"encoding/json"
 	"github.com/gorilla/mux"
-	"github.com/zitadel/schema"
+	zhttp "github.com/zitadel/zitadel/internal/api/http"
 	"github.com/zitadel/zitadel/internal/query"
 	"github.com/zitadel/zitadel/internal/zerrors"
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
@@ -37,11 +37,7 @@ type ListResponse[T any] struct {
 	Resources    []T                      `json:"Resources"` // according to the rfc this is the only field in PascalCase...
 }
 
-var schemaDecoder = schema.NewDecoder()
-
-func init() {
-	schemaDecoder.IgnoreUnknownKeys(true)
-}
+var parser = zhttp.NewParser()
 
 func NewResourceHandlerAdapter[T ResourceHolder](handler ResourceHandler[T]) *ResourceHandlerAdapter[T] {
 	return &ResourceHandlerAdapter[T]{
@@ -91,11 +87,7 @@ func (adapter *ResourceHandlerAdapter[T]) List(r *http.Request) (*ListResponse[T
 
 	switch r.Method {
 	case http.MethodGet:
-		if err := r.ParseForm(); err != nil {
-			return nil, zerrors.ThrowInvalidArgument(nil, "SCIM-uliform", "Could not deserialize form: "+err.Error())
-		}
-
-		if err := schemaDecoder.Decode(request, r.Form); err != nil {
+		if err := parser.Parse(r, request); err != nil {
 			return nil, zerrors.ThrowInvalidArgument(nil, "SCIM-ullform", "Could not decode form: "+err.Error())
 		}
 		break

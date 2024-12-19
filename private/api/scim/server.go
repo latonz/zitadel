@@ -6,6 +6,7 @@ import (
 	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/api/authz"
 	api_http "github.com/zitadel/zitadel/internal/api/http"
+	zhttp_middlware "github.com/zitadel/zitadel/internal/api/http/middleware"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/crypto"
 	"github.com/zitadel/zitadel/internal/query"
@@ -23,9 +24,10 @@ func NewServer(
 	verifier *authz.ApiTokenVerifier,
 	userCodeAlg crypto.EncryptionAlgorithm,
 	config *scim_config.Config,
+	authMiddleware *zhttp_middlware.AuthInterceptor,
 	middlewares ...func(next http.Handler) http.Handler) http.Handler {
 	verifier.RegisterServer("SCIM-V2", schemas.HandlerPrefix, AuthMapping)
-	return buildHandler(command, query, userCodeAlg, config, middlewares)
+	return buildHandler(command, query, userCodeAlg, config, authMiddleware, middlewares)
 }
 
 func buildHandler(
@@ -33,6 +35,7 @@ func buildHandler(
 	query *query.Queries,
 	userCodeAlg crypto.EncryptionAlgorithm,
 	cfg *scim_config.Config,
+	authMiddleware *zhttp_middlware.AuthInterceptor,
 	middlewares []func(next http.Handler) http.Handler) http.Handler {
 	router := mux.NewRouter()
 	for _, m := range middlewares {
@@ -41,24 +44,29 @@ func buildHandler(
 
 	// TODO org in path
 	router.Use(middleware.ContentTypeMiddleware)
-	mapResource(router, resources.NewUsersHandler(command, query, userCodeAlg, cfg))
+
+	scimMiddleware := func(next zhttp_middlware.HandlerFuncWithError) http.Handler {
+		return serrors.ErrorHandlerMiddleware(authMiddleware.HandlerFuncWithError(next))
+	}
+
+	mapResource(router, resources.NewUsersHandler(command, query, userCodeAlg, cfg), scimMiddleware)
 	return router
 }
 
-func mapResource[T resources.ResourceHolder](router *mux.Router, handler resources.ResourceHandler[T]) {
+func mapResource[T resources.ResourceHolder](router *mux.Router, handler resources.ResourceHandler[T], mw func(next zhttp_middlware.HandlerFuncWithError) http.Handler) {
 	adapter := resources.NewResourceHandlerAdapter[T](handler)
 	resourceRouter := router.PathPrefix("/" + string(handler.ResourceNamePlural())).Subrouter()
 
-	resourceRouter.HandleFunc("", handleResourceCreatedResponse(adapter.Create)).Methods(http.MethodPost)
-	resourceRouter.HandleFunc("", handleJsonResponse(adapter.List)).Methods(http.MethodGet)
-	resourceRouter.HandleFunc("/.search", handleJsonResponse(adapter.List)).Methods(http.MethodPost)
-	resourceRouter.HandleFunc("/{id}", handleResourceResponse(adapter.Get)).Methods(http.MethodGet)
-	resourceRouter.HandleFunc("/{id}", handleResourceResponse(adapter.Replace)).Methods(http.MethodPut)
-	resourceRouter.HandleFunc("/{id}", handleEmptyResponse(adapter.Delete)).Methods(http.MethodDelete)
+	resourceRouter.Handle("", mw(handleResourceCreatedResponse(adapter.Create))).Methods(http.MethodPost)
+	resourceRouter.Handle("", mw(handleJsonResponse(adapter.List))).Methods(http.MethodGet)
+	resourceRouter.Handle("/.search", mw(handleJsonResponse(adapter.List))).Methods(http.MethodPost)
+	resourceRouter.Handle("/{id}", mw(handleResourceResponse(adapter.Get))).Methods(http.MethodGet)
+	resourceRouter.Handle("/{id}", mw(handleResourceResponse(adapter.Replace))).Methods(http.MethodPut)
+	resourceRouter.Handle("/{id}", mw(handleEmptyResponse(adapter.Delete))).Methods(http.MethodDelete)
 }
 
-func handleJsonResponse[T any](next func(r *http.Request) (T, error)) func(w http.ResponseWriter, r *http.Request) {
-	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
+func handleJsonResponse[T any](next func(r *http.Request) (T, error)) zhttp_middlware.HandlerFuncWithError {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		entity, err := next(r)
 		if err != nil {
 			return err
@@ -67,11 +75,11 @@ func handleJsonResponse[T any](next func(r *http.Request) (T, error)) func(w htt
 		err = json.NewEncoder(w).Encode(entity)
 		logging.OnError(err).Warn("scim json response encoding failed")
 		return nil
-	})
+	}
 }
 
-func handleResourceCreatedResponse[T resources.ResourceHolder](next func(r *http.Request) (T, error)) func(http.ResponseWriter, *http.Request) {
-	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
+func handleResourceCreatedResponse[T resources.ResourceHolder](next func(*http.Request) (T, error)) zhttp_middlware.HandlerFuncWithError {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		entity, err := next(r)
 		if err != nil {
 			return err
@@ -79,17 +87,17 @@ func handleResourceCreatedResponse[T resources.ResourceHolder](next func(r *http
 
 		resource := entity.GetResource()
 		w.Header().Set(api_http.Location, resource.Meta.Location)
-		w.Header().Set(api_http.Etag, resource.Meta.Version)
+		w.Header().Set(api_http.Etag, resource.Meta.Version) // TODO rm?
 		w.WriteHeader(http.StatusCreated)
 
 		err = json.NewEncoder(w).Encode(entity)
 		logging.OnError(err).Warn("scim json response encoding failed")
 		return nil
-	})
+	}
 }
 
-func handleResourceResponse[T resources.ResourceHolder](next func(r *http.Request) (T, error)) func(http.ResponseWriter, *http.Request) {
-	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
+func handleResourceResponse[T resources.ResourceHolder](next func(*http.Request) (T, error)) zhttp_middlware.HandlerFuncWithError {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		entity, err := next(r)
 		if err != nil {
 			return err
@@ -107,11 +115,11 @@ func handleResourceResponse[T resources.ResourceHolder](next func(r *http.Reques
 		err = json.NewEncoder(w).Encode(entity)
 		logging.OnError(err).Warn("scim json response encoding failed")
 		return nil
-	})
+	}
 }
 
-func handleEmptyResponse(next func(r *http.Request) error) func(http.ResponseWriter, *http.Request) {
-	return serrors.ErrorHandlerMiddleware(func(w http.ResponseWriter, r *http.Request) error {
+func handleEmptyResponse(next func(*http.Request) error) zhttp_middlware.HandlerFuncWithError {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		err := next(r)
 		if err != nil {
 			return err
@@ -119,5 +127,5 @@ func handleEmptyResponse(next func(r *http.Request) error) func(http.ResponseWri
 
 		w.WriteHeader(http.StatusNoContent)
 		return nil
-	})
+	}
 }

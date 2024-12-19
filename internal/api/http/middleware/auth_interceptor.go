@@ -47,6 +47,18 @@ func (a *AuthInterceptor) HandlerFunc(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func (a *AuthInterceptor) HandlerFuncWithError(next HandlerFuncWithError) HandlerFuncWithError {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		ctx, err := authorize(r, a.verifier, a.authConfig)
+		if err != nil {
+			return err
+		}
+
+		r = r.WithContext(ctx)
+		return next(w, r)
+	}
+}
+
 type httpReq struct{}
 
 func authorize(r *http.Request, verifier authz.APITokenVerifier, authConfig authz.Config) (_ context.Context, err error) {
