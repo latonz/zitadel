@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"github.com/gorilla/mux"
 	"net"
 	"net/http"
 	"strings"
@@ -43,6 +44,9 @@ const (
 	PermissionsPolicy       = "permissions-policy"
 
 	ZitadelOrgID = "x-zitadel-orgid"
+
+	OrgIdInPathVariableName = "orgId"
+	OrgIdInPathVariable     = "{orgId}"
 )
 
 type key int
@@ -105,6 +109,12 @@ func GetAuthorization(r *http.Request) string {
 }
 
 func GetOrgID(r *http.Request) string {
+	// path variable takes precedence over header
+	orgID, ok := mux.Vars(r)[OrgIdInPathVariableName]
+	if ok {
+		return orgID
+	}
+
 	return r.Header.Get(ZitadelOrgID)
 }
 

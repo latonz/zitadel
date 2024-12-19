@@ -5,7 +5,6 @@ import (
 	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/domain"
-	"github.com/zitadel/zitadel/internal/i18n"
 	"github.com/zitadel/zitadel/internal/query"
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
 	"golang.org/x/text/language"
@@ -38,12 +37,9 @@ func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, err
 		}
 	}
 
-	// TODO why is the language not validated on the command layer?
 	if err := domain.LanguageIsDefined(scimUser.PreferredLanguage); err != nil {
 		human.PreferredLanguage = language.English
 		scimUser.PreferredLanguage = language.English
-	} else if err := domain.LanguagesAreSupported(i18n.SupportedLanguages(), scimUser.PreferredLanguage); err != nil {
-		return nil, err
 	}
 
 	return human, nil

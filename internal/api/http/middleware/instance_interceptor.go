@@ -40,9 +40,10 @@ func (a *instanceInterceptor) Handler(next http.Handler) http.Handler {
 func (a *instanceInterceptor) HandlerFunc(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, err := a.setInstanceIfNeeded(r)
-		if err != nil {
+		if err == nil {
 			r = r.WithContext(ctx)
 			next.ServeHTTP(w, r)
+			return
 		}
 
 		origin := zitadel_http.DomainContext(r.Context())

@@ -5,7 +5,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/api/authz"
-	api_http "github.com/zitadel/zitadel/internal/api/http"
+	zhttp "github.com/zitadel/zitadel/internal/api/http"
 	zhttp_middlware "github.com/zitadel/zitadel/internal/api/http/middleware"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/crypto"
@@ -39,7 +39,6 @@ func buildHandler(
 	router := mux.NewRouter()
 
 	// handle non-error related middleware
-	// TODO org in path
 	router.Use(middleware.ContentTypeMiddleware)
 
 	scimMiddleware := zhttp_middlware.ChainedWithErrorHandler(serrors.ErrorHandler, middlewares...)
@@ -49,7 +48,7 @@ func buildHandler(
 
 func mapResource[T resources.ResourceHolder](router *mux.Router, mw zhttp_middlware.ErrorHandlerFunc, handler resources.ResourceHandler[T]) {
 	adapter := resources.NewResourceHandlerAdapter[T](handler)
-	resourceRouter := router.PathPrefix("/" + string(handler.ResourceNamePlural())).Subrouter()
+	resourceRouter := router.PathPrefix("/" + zhttp.OrgIdInPathVariable + "/" + string(handler.ResourceNamePlural())).Subrouter()
 
 	resourceRouter.Handle("", mw(handleResourceCreatedResponse(adapter.Create))).Methods(http.MethodPost)
 	resourceRouter.Handle("", mw(handleJsonResponse(adapter.List))).Methods(http.MethodGet)
@@ -80,7 +79,7 @@ func handleResourceCreatedResponse[T resources.ResourceHolder](next func(*http.R
 		}
 
 		resource := entity.GetResource()
-		w.Header().Set(api_http.Location, resource.Meta.Location)
+		w.Header().Set(zhttp.Location, resource.Meta.Location)
 		w.WriteHeader(http.StatusCreated)
 
 		err = json.NewEncoder(w).Encode(entity)
@@ -97,7 +96,7 @@ func handleResourceResponse[T resources.ResourceHolder](next func(*http.Request)
 		}
 
 		resource := entity.GetResource()
-		w.Header().Set(api_http.ContentLocation, resource.Meta.Location)
+		w.Header().Set(zhttp.ContentLocation, resource.Meta.Location)
 
 		err = json.NewEncoder(w).Encode(entity)
 		logging.OnError(err).Warn("scim json response encoding failed")
