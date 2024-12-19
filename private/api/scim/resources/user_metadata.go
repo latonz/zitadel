@@ -6,86 +6,52 @@ import (
 	"github.com/zitadel/logging"
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/query"
+	"github.com/zitadel/zitadel/private/api/scim/metadata"
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
 )
 
-type metadataKey string
+func (h *UsersHandler) queryMetadataForUsers(ctx context.Context, userIds []string) (map[string]map[metadata.ScopedKey][]byte, error) {
+	queries := h.buildMetadataQueries(ctx)
 
-const (
-	metadataKeyPrefix                      = "urn:zitadel:scim:"
-	metadataKeyMiddleName      metadataKey = metadataKeyPrefix + "name.middleName"
-	metadataKeyHonorificPrefix metadataKey = metadataKeyPrefix + "name.honorificPrefix"
-	metadataKeyHonorificSuffix metadataKey = metadataKeyPrefix + "name.honorificSuffix"
-	metadataKeyExternalId      metadataKey = metadataKeyPrefix + "externalId"
-	metadataKeyProfileUrl      metadataKey = metadataKeyPrefix + "profileURL"
-	metadataKeyTitle           metadataKey = metadataKeyPrefix + "title"
-	metadataKeyLocale          metadataKey = metadataKeyPrefix + "locale"
-	metadataKeyTimezone        metadataKey = metadataKeyPrefix + "timezone"
-	metadataKeyIms             metadataKey = metadataKeyPrefix + "ims"
-	metadataKeyPhotos          metadataKey = metadataKeyPrefix + "photos"
-	metadataKeyAddresses       metadataKey = metadataKeyPrefix + "addresses"
-	metadataKeyEntitlements    metadataKey = metadataKeyPrefix + "entitlements"
-	metadataKeyRoles           metadataKey = metadataKeyPrefix + "roles"
-)
-
-var allRelevantMetadataKeys = []metadataKey{
-	metadataKeyMiddleName,
-	metadataKeyHonorificPrefix,
-	metadataKeyHonorificSuffix,
-	metadataKeyExternalId,
-	metadataKeyProfileUrl,
-	metadataKeyTitle,
-	metadataKeyLocale,
-	metadataKeyTimezone,
-	metadataKeyIms,
-	metadataKeyPhotos,
-	metadataKeyAddresses,
-	metadataKeyEntitlements,
-	metadataKeyRoles,
-}
-
-func (h *UsersHandler) queryMetadataForUsers(ctx context.Context, userIds []string) (map[string]map[metadataKey][]byte, error) {
-	queries := h.buildMetadataQueries()
-
-	metadata, err := h.query.SearchUserMetadataForUsers(ctx, false, userIds, queries)
+	md, err := h.query.SearchUserMetadataForUsers(ctx, false, userIds, queries)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataMap := make(map[string]map[metadataKey][]byte, len(metadata.Metadata))
-	for _, entry := range metadata.Metadata {
+	metadataMap := make(map[string]map[metadata.ScopedKey][]byte, len(md.Metadata))
+	for _, entry := range md.Metadata {
 		userMetadata, ok := metadataMap[entry.UserID]
 		if !ok {
-			userMetadata = make(map[metadataKey][]byte)
+			userMetadata = make(map[metadata.ScopedKey][]byte)
 			metadataMap[entry.UserID] = userMetadata
 		}
 
-		userMetadata[metadataKey(entry.Key)] = entry.Value
+		userMetadata[metadata.ScopedKey(entry.Key)] = entry.Value
 	}
 
 	return metadataMap, nil
 }
 
-func (h *UsersHandler) queryMetadataForUser(ctx context.Context, id string) (map[metadataKey][]byte, error) {
-	queries := h.buildMetadataQueries()
+func (h *UsersHandler) queryMetadataForUser(ctx context.Context, id string) (map[metadata.ScopedKey][]byte, error) {
+	queries := h.buildMetadataQueries(ctx)
 
-	metadata, err := h.query.SearchUserMetadata(ctx, false, id, queries, false)
+	md, err := h.query.SearchUserMetadata(ctx, false, id, queries, false)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataMap := make(map[metadataKey][]byte, len(metadata.Metadata))
-	for _, entry := range metadata.Metadata {
-		metadataMap[metadataKey(entry.Key)] = entry.Value
+	metadataMap := make(map[metadata.ScopedKey][]byte, len(md.Metadata))
+	for _, entry := range md.Metadata {
+		metadataMap[metadata.ScopedKey(entry.Key)] = entry.Value
 	}
 
 	return metadataMap, nil
 }
 
-func (h *UsersHandler) buildMetadataQueries() *query.UserMetadataSearchQueries {
-	keyQueries := make([]query.SearchQuery, len(allRelevantMetadataKeys))
-	for i, key := range allRelevantMetadataKeys {
-		keyQueries[i] = buildMetadataKeyQuery(key)
+func (h *UsersHandler) buildMetadataQueries(ctx context.Context) *query.UserMetadataSearchQueries {
+	keyQueries := make([]query.SearchQuery, len(metadata.ScimUserRelevantMetadataKeys))
+	for i, key := range metadata.ScimUserRelevantMetadataKeys {
+		keyQueries[i] = buildMetadataKeyQuery(ctx, key)
 	}
 
 	queries := &query.UserMetadataSearchQueries{
@@ -95,8 +61,9 @@ func (h *UsersHandler) buildMetadataQueries() *query.UserMetadataSearchQueries {
 	return queries
 }
 
-func buildMetadataKeyQuery(key metadataKey) query.SearchQuery {
-	q, err := query.NewUserMetadataKeySearchQuery(string(key), query.TextEquals)
+func buildMetadataKeyQuery(ctx context.Context, key metadata.Key) query.SearchQuery {
+	scopedKey := metadata.ScopeKey(ctx, key)
+	q, err := query.NewUserMetadataKeySearchQuery(string(scopedKey), query.TextEquals)
 	if err != nil {
 		logging.Panic("Error build user metadata query for key " + key)
 	}
@@ -104,9 +71,9 @@ func buildMetadataKeyQuery(key metadataKey) query.SearchQuery {
 	return q
 }
 
-func (h *UsersHandler) mapMetadataToCommands(user *ScimUser) []*command.AddMetadataEntry {
-	metadata := make([]*command.AddMetadataEntry, 0, len(allRelevantMetadataKeys))
-	for _, key := range allRelevantMetadataKeys {
+func (h *UsersHandler) mapMetadataToCommands(ctx context.Context, user *ScimUser) []*command.AddMetadataEntry {
+	md := make([]*command.AddMetadataEntry, 0, len(metadata.ScimUserRelevantMetadataKeys))
+	for _, key := range metadata.ScimUserRelevantMetadataKeys {
 		value, err := getValueForMetadataKey(user, key)
 		if err != nil {
 			logging.OnError(err).Warn("Failed to serialize scim metadata")
@@ -114,34 +81,34 @@ func (h *UsersHandler) mapMetadataToCommands(user *ScimUser) []*command.AddMetad
 		}
 
 		if len(value) > 0 {
-			metadata = append(metadata, &command.AddMetadataEntry{
-				Key:   string(key),
+			md = append(md, &command.AddMetadataEntry{
+				Key:   string(metadata.ScopeKey(ctx, key)),
 				Value: value,
 			})
 		}
 	}
 
-	return metadata
+	return md
 }
 
-func getValueForMetadataKey(user *ScimUser, key metadataKey) ([]byte, error) {
+func getValueForMetadataKey(user *ScimUser, key metadata.Key) ([]byte, error) {
 	value := getRawValueForMetadataKey(user, key)
 	if value == nil {
 		return nil, nil
 	}
 
 	switch key {
-	case metadataKeyEntitlements:
+	case metadata.KeyEntitlements:
 		fallthrough
-	case metadataKeyIms:
+	case metadata.KeyIms:
 		fallthrough
-	case metadataKeyPhotos:
+	case metadata.KeyPhotos:
 		fallthrough
-	case metadataKeyAddresses:
+	case metadata.KeyAddresses:
 		fallthrough
-	case metadataKeyRoles:
+	case metadata.KeyRoles:
 		return json.Marshal(value)
-	case metadataKeyProfileUrl:
+	case metadata.KeyProfileUrl:
 		return []byte(value.(*schemas.HttpURL).String()), nil
 	default:
 		valueStr := value.(string)
@@ -152,50 +119,50 @@ func getValueForMetadataKey(user *ScimUser, key metadataKey) ([]byte, error) {
 	}
 }
 
-func getRawValueForMetadataKey(user *ScimUser, key metadataKey) interface{} {
+func getRawValueForMetadataKey(user *ScimUser, key metadata.Key) interface{} {
 	switch key {
-	case metadataKeyIms:
+	case metadata.KeyIms:
 		return user.Ims
-	case metadataKeyPhotos:
+	case metadata.KeyPhotos:
 		return user.Photos
-	case metadataKeyAddresses:
+	case metadata.KeyAddresses:
 		return user.Addresses
-	case metadataKeyEntitlements:
+	case metadata.KeyEntitlements:
 		return user.Entitlements
-	case metadataKeyRoles:
+	case metadata.KeyRoles:
 		return user.Roles
-	case metadataKeyMiddleName:
+	case metadata.KeyMiddleName:
 		if user.Name == nil {
 			return ""
 		}
 		return user.Name.MiddleName
-	case metadataKeyHonorificPrefix:
+	case metadata.KeyHonorificPrefix:
 		if user.Name == nil {
 			return ""
 		}
 		return user.Name.HonorificPrefix
-	case metadataKeyHonorificSuffix:
+	case metadata.KeyHonorificSuffix:
 		if user.Name == nil {
 			return ""
 		}
 		return user.Name.HonorificSuffix
-	case metadataKeyExternalId:
+	case metadata.KeyExternalId:
 		return user.ExternalID
-	case metadataKeyProfileUrl:
+	case metadata.KeyProfileUrl:
 		return user.ProfileUrl
-	case metadataKeyTitle:
+	case metadata.KeyTitle:
 		return user.Title
-	case metadataKeyLocale:
+	case metadata.KeyLocale:
 		return user.Locale
-	case metadataKeyTimezone:
+	case metadata.KeyTimezone:
 		return user.Timezone
 	default:
 		panic("unknown metadata key" + key)
 	}
 }
 
-func extractScalarMetadata(metadata map[metadataKey][]byte, key metadataKey) string {
-	val, ok := metadata[key]
+func extractScalarMetadata(ctx context.Context, md map[metadata.ScopedKey][]byte, key metadata.Key) string {
+	val, ok := md[metadata.ScopeKey(ctx, key)]
 	if !ok {
 		return ""
 	}
@@ -203,8 +170,8 @@ func extractScalarMetadata(metadata map[metadataKey][]byte, key metadataKey) str
 	return string(val)
 }
 
-func extractHttpURLMetadata(metadata map[metadataKey][]byte, key metadataKey) *schemas.HttpURL {
-	val, ok := metadata[key]
+func extractHttpURLMetadata(ctx context.Context, md map[metadata.ScopedKey][]byte, key metadata.Key) *schemas.HttpURL {
+	val, ok := md[metadata.ScopeKey(ctx, key)]
 	if !ok {
 		return nil
 	}
@@ -218,8 +185,8 @@ func extractHttpURLMetadata(metadata map[metadataKey][]byte, key metadataKey) *s
 	return url
 }
 
-func extractJsonMetadata(metadata map[metadataKey][]byte, key metadataKey, v interface{}) error {
-	val, ok := metadata[key]
+func extractJsonMetadata(ctx context.Context, md map[metadata.ScopedKey][]byte, key metadata.Key, v interface{}) error {
+	val, ok := md[metadata.ScopeKey(ctx, key)]
 	if !ok {
 		return nil
 	}

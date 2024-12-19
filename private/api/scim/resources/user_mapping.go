@@ -6,19 +6,20 @@ import (
 	"github.com/zitadel/zitadel/internal/command"
 	"github.com/zitadel/zitadel/internal/domain"
 	"github.com/zitadel/zitadel/internal/query"
+	"github.com/zitadel/zitadel/private/api/scim/metadata"
 	"github.com/zitadel/zitadel/private/api/scim/schemas"
 	"golang.org/x/text/language"
 	"strconv"
 )
 
-func (h *UsersHandler) mapToAddHuman(scimUser *ScimUser) (*command.AddHuman, error) {
+func (h *UsersHandler) mapToAddHuman(ctx context.Context, scimUser *ScimUser) (*command.AddHuman, error) {
 	human := &command.AddHuman{
 		Username:    scimUser.UserName,
 		NickName:    scimUser.NickName,
 		DisplayName: scimUser.DisplayName,
 		Email:       h.mapPrimaryEmail(scimUser),
 		Phone:       h.mapPrimaryPhone(scimUser),
-		Metadata:    h.mapMetadataToCommands(scimUser),
+		Metadata:    h.mapMetadataToCommands(ctx, scimUser),
 	}
 
 	if scimUser.Password != nil {
@@ -75,12 +76,12 @@ func (h *UsersHandler) mapPrimaryPhone(scimUser *ScimUser) command.Phone {
 	return command.Phone{}
 }
 
-func (h *UsersHandler) mapToScimUsers(ctx context.Context, users []*query.User, metadata map[string]map[metadataKey][]byte) []*ScimUser {
+func (h *UsersHandler) mapToScimUsers(ctx context.Context, users []*query.User, md map[string]map[metadata.ScopedKey][]byte) []*ScimUser {
 	result := make([]*ScimUser, len(users))
 	for i, user := range users {
-		userMetadata, ok := metadata[user.ID]
+		userMetadata, ok := md[user.ID]
 		if !ok {
-			userMetadata = make(map[metadataKey][]byte)
+			userMetadata = make(map[metadata.ScopedKey][]byte)
 		}
 
 		result[i] = h.mapToScimUser(ctx, user, userMetadata)
@@ -89,16 +90,16 @@ func (h *UsersHandler) mapToScimUsers(ctx context.Context, users []*query.User, 
 	return result
 }
 
-func (h *UsersHandler) mapToScimUser(ctx context.Context, user *query.User, metadata map[metadataKey][]byte) *ScimUser {
+func (h *UsersHandler) mapToScimUser(ctx context.Context, user *query.User, md map[metadata.ScopedKey][]byte) *ScimUser {
 	scimUser := &ScimUser{
 		Resource:     h.buildResourceForQuery(ctx, user),
 		ID:           user.ID,
-		ExternalID:   extractScalarMetadata(metadata, metadataKeyExternalId),
+		ExternalID:   extractScalarMetadata(ctx, md, metadata.KeyExternalId),
 		UserName:     user.Username,
-		ProfileUrl:   extractHttpURLMetadata(metadata, metadataKeyProfileUrl),
-		Title:        extractScalarMetadata(metadata, metadataKeyTitle),
-		Locale:       extractScalarMetadata(metadata, metadataKeyLocale),
-		Timezone:     extractScalarMetadata(metadata, metadataKeyTimezone),
+		ProfileUrl:   extractHttpURLMetadata(ctx, md, metadata.KeyProfileUrl),
+		Title:        extractScalarMetadata(ctx, md, metadata.KeyTitle),
+		Locale:       extractScalarMetadata(ctx, md, metadata.KeyLocale),
+		Timezone:     extractScalarMetadata(ctx, md, metadata.KeyTimezone),
 		Active:       user.State.IsEnabled(),
 		Ims:          make([]*ScimIms, 0),
 		Addresses:    make([]*ScimAddress, 0),
@@ -107,34 +108,34 @@ func (h *UsersHandler) mapToScimUser(ctx context.Context, user *query.User, meta
 		Roles:        make([]*ScimRole, 0),
 	}
 
-	if err := extractJsonMetadata(metadata, metadataKeyIms, &scimUser.Ims); err != nil {
+	if err := extractJsonMetadata(ctx, md, metadata.KeyIms, &scimUser.Ims); err != nil {
 		logging.OnError(err).Warn("Could not deserialize scim ims metadata")
 	}
 
-	if err := extractJsonMetadata(metadata, metadataKeyAddresses, &scimUser.Addresses); err != nil {
+	if err := extractJsonMetadata(ctx, md, metadata.KeyAddresses, &scimUser.Addresses); err != nil {
 		logging.OnError(err).Warn("Could not deserialize scim addresses metadata")
 	}
 
-	if err := extractJsonMetadata(metadata, metadataKeyPhotos, &scimUser.Photos); err != nil {
+	if err := extractJsonMetadata(ctx, md, metadata.KeyPhotos, &scimUser.Photos); err != nil {
 		logging.OnError(err).Warn("Could not deserialize scim photos metadata")
 	}
 
-	if err := extractJsonMetadata(metadata, metadataKeyEntitlements, &scimUser.Entitlements); err != nil {
+	if err := extractJsonMetadata(ctx, md, metadata.KeyEntitlements, &scimUser.Entitlements); err != nil {
 		logging.OnError(err).Warn("Could not deserialize scim entitlements metadata")
 	}
 
-	if err := extractJsonMetadata(metadata, metadataKeyRoles, &scimUser.Roles); err != nil {
+	if err := extractJsonMetadata(ctx, md, metadata.KeyRoles, &scimUser.Roles); err != nil {
 		logging.OnError(err).Warn("Could not deserialize scim roles metadata")
 	}
 
 	if user.Human != nil {
-		mapHumanToScimUser(user.Human, scimUser, metadata)
+		mapHumanToScimUser(ctx, user.Human, scimUser, md)
 	}
 
 	return scimUser
 }
 
-func mapHumanToScimUser(human *query.Human, user *ScimUser, metadata map[metadataKey][]byte) {
+func mapHumanToScimUser(ctx context.Context, human *query.Human, user *ScimUser, md map[metadata.ScopedKey][]byte) {
 	user.DisplayName = human.DisplayName
 	user.NickName = human.NickName
 	user.PreferredLanguage = human.PreferredLanguage
@@ -142,9 +143,9 @@ func mapHumanToScimUser(human *query.Human, user *ScimUser, metadata map[metadat
 		Formatted:       human.DisplayName,
 		FamilyName:      human.LastName,
 		GivenName:       human.FirstName,
-		MiddleName:      extractScalarMetadata(metadata, metadataKeyMiddleName),
-		HonorificPrefix: extractScalarMetadata(metadata, metadataKeyHonorificPrefix),
-		HonorificSuffix: extractScalarMetadata(metadata, metadataKeyHonorificSuffix),
+		MiddleName:      extractScalarMetadata(ctx, md, metadata.KeyMiddleName),
+		HonorificPrefix: extractScalarMetadata(ctx, md, metadata.KeyHonorificPrefix),
+		HonorificSuffix: extractScalarMetadata(ctx, md, metadata.KeyHonorificSuffix),
 	}
 
 	if string(human.Email) != "" {

@@ -41,6 +41,7 @@ func buildHandler(
 	// handle non-error related middleware
 	router.Use(middleware.ContentTypeMiddleware)
 
+	middlewares = append(middlewares, middleware.ScimContextMiddleware(query))
 	scimMiddleware := zhttp_middlware.ChainedWithErrorHandler(serrors.ErrorHandler, middlewares...)
 	mapResource(router, scimMiddleware, resources.NewUsersHandler(command, query, userCodeAlg, cfg))
 	return router

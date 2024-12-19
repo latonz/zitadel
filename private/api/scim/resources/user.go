@@ -21,7 +21,7 @@ type UsersHandler struct {
 type ScimUser struct {
 	*Resource
 	ID                string                   `json:"id"`
-	ExternalID        string                   `json:"externalId,omitempty"` // TODO scope to provisioning domain
+	ExternalID        string                   `json:"externalId,omitempty"`
 	UserName          string                   `json:"userName,omitempty"`
 	Name              *ScimUserName            `json:"name,omitempty"`
 	DisplayName       string                   `json:"displayName,omitempty"`
@@ -128,7 +128,7 @@ func (h *UsersHandler) SchemaType() schemas.ScimSchemaType {
 
 func (h *UsersHandler) Create(ctx context.Context, user *ScimUser) (*ScimUser, error) {
 	orgID := authz.GetCtxData(ctx).OrgID
-	addHuman, err := h.mapToAddHuman(user)
+	addHuman, err := h.mapToAddHuman(ctx, user)
 	if err != nil {
 		return nil, err
 	}
