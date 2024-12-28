@@ -34,6 +34,7 @@ import (
 	metrics "github.com/zitadel/zitadel/internal/telemetry/metrics/config"
 	profiler "github.com/zitadel/zitadel/internal/telemetry/profiler/config"
 	tracing "github.com/zitadel/zitadel/internal/telemetry/tracing/config"
+	scim_config "github.com/zitadel/zitadel/private/api/scim/config"
 )
 
 type Config struct {
@@ -60,6 +61,7 @@ type Config struct {
 	UserAgentCookie     *middleware.UserAgentCookieConfig
 	OIDC                oidc.Config
 	SAML                saml.Config
+	SCIM                scim_config.Config
 	Login               login.Config
 	Console             console.Config
 	AssetStorage        static_config.AssetStorageConfig

@@ -604,6 +604,33 @@ func (q *Queries) GetNotifyUser(ctx context.Context, shouldTriggered bool, queri
 	return user, err
 }
 
+func (q *Queries) CountUsers(ctx context.Context, queries *UserSearchQueries) (count uint64, err error) {
+	ctx, span := tracing.NewSpan(ctx)
+	defer func() { span.EndWithError(err) }()
+
+	query := sq.Select(countColumn.identifier()).
+		From(userTable.identifier()).
+		PlaceholderFormat(sq.Dollar)
+	eq := sq.Eq{UserInstanceIDCol.identifier(): authz.GetInstance(ctx).InstanceID()}
+	stmt, args, err := queries.toQuery(query).Where(eq).ToSql()
+	if err != nil {
+		return 0, zerrors.ThrowInternal(err, "QUERY-w3Dx", "Errors.Query.SQLStatment")
+	}
+
+	err = q.client.QueryContext(ctx, func(rows *sql.Rows) error {
+		if !rows.Next() {
+			return zerrors.ThrowInternal(nil, "QUERY-Dx43g", "Errors.Query.SQLStatment")
+		}
+
+		err = rows.Scan(&count)
+		return err
+	}, stmt, args...)
+	if err != nil {
+		return 0, zerrors.ThrowInternal(err, "QUERY-AG4gs", "Errors.Internal")
+	}
+	return count, err
+}
+
 func (q *Queries) SearchUsers(ctx context.Context, queries *UserSearchQueries, permissionCheck domain.PermissionCheck) (*Users, error) {
 	users, err := q.searchUsers(ctx, queries)
 	if err != nil {

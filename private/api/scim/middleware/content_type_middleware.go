@@ -1,0 +1,50 @@
+package middleware
+
+import (
+	"github.com/zitadel/logging"
+	zhttp "github.com/zitadel/zitadel/internal/api/http"
+	"github.com/zitadel/zitadel/internal/api/http/middleware"
+	"github.com/zitadel/zitadel/internal/zerrors"
+	"mime"
+	"net/http"
+	"strings"
+)
+
+const (
+	ContentTypeScim = "application/scim+json"
+	ContentTypeJson = "application/json"
+)
+
+func ContentTypeMiddleware(next middleware.HandlerFuncWithError) middleware.HandlerFuncWithError {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		if !validateContentType(r.Header.Get(zhttp.ContentType)) {
+			return zerrors.ThrowInvalidArgumentf(nil, "SMCM-12x4", "Invalid content type header")
+		}
+
+		if !validateContentType(r.Header.Get(zhttp.Accept)) {
+			return zerrors.ThrowInvalidArgumentf(nil, "SMCM-12x5", "Invalid accept header")
+		}
+
+		w.Header().Set(zhttp.ContentType, ContentTypeScim)
+		return next(w, r)
+	}
+}
+
+func validateContentType(contentType string) bool {
+	if contentType == "" {
+		return true
+	}
+
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		logging.OnError(err).Warn("failed to parse content type header")
+		return false
+	}
+
+	if mediaType != "" && !strings.EqualFold(mediaType, ContentTypeJson) && !strings.EqualFold(mediaType, ContentTypeScim) {
+		return false
+	}
+
+	charset, ok := params["charset"]
+	return !ok || strings.EqualFold(charset, "utf-8")
+}
